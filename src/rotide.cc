@@ -3,14 +3,20 @@
 int main(int argc, char** argv)
 {
     Curses curses;
+
+    char c = '\0';
+
     curses.refresh();
-    curses.at(0, 0) << COLOR(BLACK, WHITE)
-                    << "Name:"
-                    << RESET 
-                    << BOLD
-                    << " Justin Bruce Van Horne";
-    curses.at(50, 50)
-                    << "Hello, world!";
-    curses.wait();
+    Curses_pos at = curses.at(0, 0);
+
+    while (curses.get(&c)) {
+        at << c;
+
+        if (c == '\n') {
+            at.row++;
+            at.col = 0;
+        }
+        
+    }
     return 0;
 }

@@ -1,6 +1,5 @@
 #include "rotide/curses.hpp"
 #include <ncurses.h>
-#include <iostream>
 
 Curses::Curses()
 {
@@ -29,6 +28,14 @@ void Curses::refresh()
 void Curses::wait()
 {
     getch();
+}
+
+bool Curses::get(char* s)
+{
+    *s = getch();
+    if (*s == 3)
+        return false;
+    return true;
 }
 
 

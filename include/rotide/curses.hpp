@@ -92,6 +92,7 @@ public:
     void refresh();
     void shutdown();
     void wait();
+    bool get(char* c);
     Curses_pos& at(const int row, const int col);
 private:
     Curses_pos pos;
