@@ -1,5 +1,4 @@
-#
-# Copyright 2011 Justin Bruce Van Horne <justinvh@gmail.com>
+# # Copyright 2011 Justin Bruce Van Horne <justinvh@gmail.com>
 # All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,12 +13,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-cmake_minimum_required(VERSION 2.8)
 project(rotide)
 
-set(SOURCES
-    src/rotide.cc)
+set(project_name rotide)
+cmake_minimum_required(VERSION 2.8)
 
-include_directories("include")
-add_executable(rotide ${SOURCES})
-target_link_libraries(rotide)
+set(CURSES_NEED_NCURSES TRUE)
+find_package(Curses)
+
+set(SOURCES
+    src/rotide.cc
+    src/curses.cc
+    )
+
+include_directories(
+    "include"
+    ${CURSES_INCLUDE_DIR}
+    )
+add_executable(ro ${SOURCES})
+target_link_libraries(ro ${CURSES_LIBRARY})
