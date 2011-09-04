@@ -18,17 +18,22 @@ project(rotide)
 set(project_name rotide)
 cmake_minimum_required(VERSION 2.8)
 
+set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/modules)
+
 set(CURSES_NEED_NCURSES TRUE)
 find_package(Curses)
+find_package(V8)
 
 set(SOURCES
     src/rotide.cc
     src/curses.cc
+    src/scripting.cc
     )
 
 include_directories(
     "include"
     ${CURSES_INCLUDE_DIR}
+    ${V8_INCLUDE_DIR}
     )
 add_executable(ro ${SOURCES})
-target_link_libraries(ro ${CURSES_LIBRARY})
+target_link_libraries(ro -lncursesw ${V8_LIBRARY})

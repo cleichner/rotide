@@ -8,8 +8,7 @@ Curses::Curses()
     raw();
     keypad(stdscr, TRUE);
     noecho();
-}
-
+} 
 Curses::~Curses()
 {
     shutdown();
@@ -59,10 +58,13 @@ Curses_pos& Curses_pos::operator<<(const Curses_pos& cp)
     return *this;
 }
 
-Curses_pos& Curses_pos::operator<<(const Curses_style& cs)
+Curses_pos& Curses_pos::operator<<(const Curses_action& ca)
 {
-    long int style = (long int)cs;
-    if (style & RESET || style & NORMAL) {
+    long int action = (long int)ca;
+    if (action & NEXT_LINE) {
+        col = 0;
+        row++;
+    } else if (action & RESET) {
         for (Color_list::const_iterator 
                 cit = color_ids.begin(),
                 end = color_ids.end();
@@ -73,9 +75,14 @@ Curses_pos& Curses_pos::operator<<(const Curses_style& cs)
         }
 
         attrset(NORMAL);
-        style &= ~RESET;
     }
 
+    return *this;
+}
+
+Curses_pos& Curses_pos::operator<<(const Curses_style& cs)
+{
+    long int style = (long int)cs;
     attron(style);
     return *this;
 }
@@ -86,7 +93,6 @@ Curses_pos& Curses_pos::operator<<(const Curses_color& cc)
     color_ids.push_back(cc());
     return *this;
 }
-
 
 Curses_color COLOR(int foreground, int background)
 {

@@ -45,7 +45,6 @@ enum Curses_style
     CYAN        = 6,
     WHITE       = 7,
     NORMAL      = 0,
-    RESET       = -1,
     ATTRIBUTES  = ~(1U - 1U),
     STANDOUT    = BIT(8),
     UNDERLINE   = BIT(9),
@@ -64,6 +63,12 @@ enum Curses_style
     VERTICAL    = BIT(22),
 };
 
+enum Curses_action
+{
+    NEXT_LINE = BIT(1),
+    RESET = BIT(2)
+};
+
 struct Curses_pos {
     Color_list color_ids;
     int col, row;
@@ -80,6 +85,7 @@ struct Curses_pos {
 
     Curses_pos& operator<<(const Curses_pos& cp);
     Curses_pos& operator<<(const Curses_style& cs);
+    Curses_pos& operator<<(const Curses_action& ca);
     Curses_pos& operator<<(const Curses_color& cc);
 
     void print(const std::string& s);
