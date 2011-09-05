@@ -1,5 +1,5 @@
 ro.core.enable([
         // The keyboard core handles keyboard interaction
         // and movement throughout the editor.
-        "keyboard",
+        "core/keyboard.js",
 ]);

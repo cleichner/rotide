@@ -3,5 +3,3 @@ ro
     .bind('j', function(buffer) {
         buffer.line.append('foo');
     });
-
-            

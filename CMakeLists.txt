@@ -29,6 +29,7 @@ set(SOURCES
     src/curses.cc
     src/scripting.cc
     src/js/core.cc
+    src/v8/type_conversion.cc
     )
 
 include_directories(

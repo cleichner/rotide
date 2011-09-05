@@ -76,7 +76,7 @@ T* unwrap_global_pointer(int index)
 These are macros for generating setters and getters for any attribute that
 should be translated between the JavaScript and engine.
 */
-#define JS_INTERNAL(klass) JS_internal_##klass 
+#define JS_INTERNAL(klass) JavaScript_class_##klass 
 
 #define DEFINE(klass) struct JS_INTERNAL(klass)
 
@@ -84,77 +84,77 @@ should be translated between the JavaScript and engine.
 Macros for defining a getter relationship between a value controlled by the
 class and an accessor from JavaScript.
 */
-#define JS_GETTER(method) \
-    static v8::Handle<v8::Value> js_getter_##method(v8::Local<v8::String> name, \
+#define ACCESSOR_GETTER(method) \
+    static v8::Handle<v8::Value> javascript_getter_##method(v8::Local<v8::String> name, \
         const v8::AccessorInfo& info)
 
-#define JS_GETTER_CALLER(klass, method) \
-    klass::JS_internal_##klass::js_getter_##method
+#define ACCESSOR_GETTER_CALLER(klass, method) \
+    klass::JavaScript_class_##klass::javascript_getter_##method
 
-#define JS_GETTER_CLASS(klass, method) \
-    v8::Handle<v8::Value> JS_GETTER_CALLER(klass,method)(v8::Local<v8::String> name, \
+#define ACCESSOR_GETTER_DEFINE(klass, method) \
+    v8::Handle<v8::Value> ACCESSOR_GETTER_CALLER(klass,method)(v8::Local<v8::String> name, \
         const v8::AccessorInfo& info)
 
 /*
 Macros for defining a setter relationship between a value controlled by the
 class and an accessor from JavaScript.
 */
-#define JS_SETTER(method) \
-    static void js_setter_##method(v8::Local<v8::String> name, v8::Local<v8::Value> value, \
+#define ACCESSOR_SETTER(method) \
+    static void javascript_setter_##method(v8::Local<v8::String> name, v8::Local<v8::Value> value, \
         const v8::AccessorInfo& info)
 
-#define JS_SETTER_CALLER(klass, method) \
-    klass::JS_internal_##klass::js_setter_##method
+#define ACCESSOR_SETTER_CALLER(klass, method) \
+    klass::JavaScript_class_##klass::javascript_setter_##method
 
-#define JS_SETTER_CLASS(klass, method) \
-    void JS_SETTER_CALLER(klass, method)(v8::Local<v8::String> name, \
+#define ACCESSOR_SETTER_DEFINE(klass, method) \
+    void ACCESSOR_SETTER_CALLER(klass, method)(v8::Local<v8::String> name, \
         v8::Local<v8::Value> value, const v8::AccessorInfo& info)
 
 /*
 A wrapper around both the setter and getter for declarations
 */
-#define JS_GETTER_AND_SETTER(method) \
-    static v8::Handle<v8::Value> js_getter_##method(v8::Local<v8::String> name, \
+#define ACCESSOR(method) \
+    static v8::Handle<v8::Value> javascript_getter_##method(v8::Local<v8::String> name, \
         const v8::AccessorInfo& info); \
-    static void js_setter_##method(v8::Local<v8::String> name, v8::Local<v8::Value> value, \
+    static void javascript_setter_##method(v8::Local<v8::String> name, v8::Local<v8::Value> value, \
         const v8::AccessorInfo& info);
 
 /*
 Map methods to define accessors when constructing an initializer list for
 JS_Mapping. See src/element.cpp for an example (accessors[])
 */
-#define JS_MAP(klass, method) \
-    { #method , JS_GETTER_CALLER(klass, method), JS_SETTER_CALLER(klass, method), false }
+#define ACCESSOR_MAP(klass, method) \
+    { #method , ACCESSOR_GETTER_CALLER(klass, method), ACCESSOR_SETTER_CALLER(klass, method), false }
 
-#define JS_MAP_INTERNAL(klass, method) \
-    { #method , JS_GETTER_CALLER(klass, method), JS_SETTER_CALLER(klass, method), true }
+#define ACCESSOR_INTERNAL(klass, method) \
+    { #method , ACCESSOR_GETTER_CALLER(klass, method), ACCESSOR_SETTER_CALLER(klass, method), true }
 
-#define JS_MAP_CUSTOM(klass, method, name) \
-    { name, JS_GETTER_CALLER(klass, method), JS_SETTER_CALLER(klass, method), false }
+#define ACCESSOR_CUSTOM(klass, method, name) \
+    { name, ACCESSOR_GETTER_CALLER(klass, method), ACCESSOR_SETTER_CALLER(klass, method), false }
 
-#define JS_MAP_CUSTOM_INTERNAL(klass, method, name) \
-    { name, JS_GETTER_CALLER(klass, method), JS_SETTER_CALLER(klass, method), true }
+#define ACCESSOR_CUSTOM_INTERNAL(klass, method, name) \
+    { name, ACCESSOR_GETTER_CALLER(klass, method), ACCESSOR_SETTER_CALLER(klass, method), true }
 
-#define JS_MAP_GETTER(klass, method) \
-    { #method , JS_GETTER_CALLER(klass, method), NULL, false }
+#define ACCESSOR_GETTER_MAP(klass, method) \
+    { #method , ACCESSOR_GETTER_CALLER(klass, method), NULL, false }
 
-#define JS_MAP_GETTER_INTERNAL(klass, method) \
-    { #method , JS_GETTER_CALLER(klass, method), NULL, true}
+#define ACCESSOR_GETTER_INTERNAL(klass, method) \
+    { #method , ACCESSOR_GETTER_CALLER(klass, method), NULL, true}
 
-#define JS_MAP_SETTER(klass, method) \
-    { #method , NULL, JS_SETTER_CALLER(klass, method), false }
+#define ACCESSOR_SETTER_MAP(klass, method) \
+    { #method , NULL, ACCESSOR_SETTER_CALLER(klass, method), false }
 
-#define JS_MAP_SETTER_INTERNAL(klass, method) \
-    { #method , NULL, JS_SETTER_CALLER(klass, method), true }
+#define ACCESSOR_SETTER__INTERNAL(klass, method) \
+    { #method , NULL, ACCESSOR_SETTER_CALLER(klass, method), true }
 
 /*
 A wrapper around defining functions.
 */
 #define FUNCTION_CALLER(klass, method) \
-    klass::JS_internal_##klass::js_fun_##method
+    klass::JavaScript_class_##klass::javascript_function_##method
 
 #define FUNCTION(method) \
-    static v8::Handle<v8::Value> js_fun_##method(const v8::Arguments& args)
+    static v8::Handle<v8::Value> javascript_function_##method(const v8::Arguments& args)
 
 #define FUNCTION_DEFINE(klass, method) \
     v8::Handle<v8::Value> FUNCTION_CALLER(klass, method)(const v8::Arguments& args)
