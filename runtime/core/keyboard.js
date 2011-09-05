@@ -1,5 +1,6 @@
 ro
-    .require(ro.insert_mode)
-    .bind('j', function(buffer) {
-        buffer.line.append('foo');
+    .bind("j", function(buffer) {
+        if (!ro.insert_mode)
+            return;
+        //buffer.lines[buffer.current_line].append('foo');
     });

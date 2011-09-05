@@ -17,6 +17,7 @@ Accessors accessors[] = {
 
 Function_mapping functions[] = {
     FUNCTION_MAP(Scripting_engine, test),
+    FUNCTION_MAP(Scripting_engine, bind),
     { NULL, NULL, NULL }
 };
 
@@ -155,7 +156,7 @@ bool Scripting_engine::load(const std::string& file)
     if (tc.HasCaught()) {
         v8::Handle<v8::Message> message = tc.Message();
         pos  << "[FAIL]" << NEXT_LINE
-            << "<" << str_file << ":" << message->GetLineNumber() << "> "
+            << "<" << str_file.str() << ":" << message->GetLineNumber() << "> "
             << *v8::String::Utf8Value(message->Get());
         return false;
     }
@@ -190,6 +191,25 @@ FUNCTION_DEFINE(Scripting_engine, test)
 
     self->curses->at(x,y) << "Says: " << str << NEXT_LINE;
     return v8::Undefined();
+}
+
+FUNCTION_DEFINE(Scripting_engine, bind)
+{
+    Scripting_engine* self = unwrap<Scripting_engine>(args.Holder());
+    std::string key;
+    v8::Handle<v8::Value> key_repr(args[0]);
+    v8::Handle<v8::Value> function_repr(args[1]);
+    if (smart_convert(key_repr, &key) && function_repr->IsFunction()) {
+        v8::Handle<v8::Function> function 
+            = v8::Handle<v8::Function>::Cast(function_repr);
+        self->bindings.insert(key, function);
+    } else {
+        return v8::Exception::TypeError(
+                v8::String::New(
+                    "The definition of this method is: \
+                    ro.bind(String, Function). You provided the wrong types \
+                    for the arguments to this method."));
+    }
 }
 
 ACCESSOR_GETTER_DEFINE(Scripting_engine, insert_mode)
