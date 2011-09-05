@@ -19,13 +19,24 @@ MARK_AS_ADVANCED(V8_INCLUDE_DIR)
 
 # Look for the library.
 # Does this work on UNIX systems? (LINUX)
-FIND_LIBRARY( V8_LIBRARY NAMES v8
+FIND_LIBRARY( V8_LIBRARY NAMES v8_g
               PATHS $ENV{H3D_EXTERNAL_ROOT}/lib
                     $ENV{H3D_ROOT}/../External/lib
                     ../../External/lib
                     ${module_file_path}/../../../External/lib
               DOC "Path to v8 library." )
 MARK_AS_ADVANCED(V8_LIBRARY)
+
+# Look for the library.
+# Does this work on UNIX systems? (LINUX)
+FIND_LIBRARY( V8_LIBRARY_DEBUG NAMES v8
+              PATHS $ENV{H3D_EXTERNAL_ROOT}/lib
+                    $ENV{H3D_ROOT}/../External/lib
+                    ../../External/lib
+                    ${module_file_path}/../../../External/lib
+              DOC "Path to v8 library." )
+MARK_AS_ADVANCED(V8_LIBRARY_DEBUG)
+
 
 # Copy the results to the output variables.
 IF(V8_INCLUDE_DIR AND V8_LIBRARY)

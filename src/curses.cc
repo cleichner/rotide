@@ -51,6 +51,17 @@ Curses::~Curses()
     shutdown();
 }
 
+void Curses::clear()
+{
+    for (Buffer_list::const_iterator cit = buffers.begin(),
+            end = buffers.end();
+            cit != end;
+            ++cit)
+    {
+        werase(*cit);
+    }
+}
+
 void Curses::resize()
 {
     for (Buffer_list::const_iterator cit = buffers.begin(),
@@ -87,6 +98,7 @@ void Curses::wait()
 bool Curses::get(char* s)
 {
     *s = getch();
+    last_key = *s;
     if (*s == 3)
         return false;
     return true;

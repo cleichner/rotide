@@ -110,6 +110,32 @@ Scripting_engine::Scripting_engine(Curses* curses)
     }
 }
 
+void Scripting_engine::think()
+{
+    const Function_list* list;
+    if (bindings.get(curses->last_key, &list)) {
+        v8::HandleScope handle;
+        v8::Context::Scope scope(context);
+        v8::TryCatch tc;
+        for (Function_list::const_iterator cit = list->begin(),
+                end = list->end();
+                cit != end;
+                ++cit)
+        {
+            (*cit)->Call(object, 0, NULL);
+            if (tc.HasCaught()) {
+                Curses_pos pos = curses->at(0, 0);
+                v8::Handle<v8::Message> message = tc.Message();
+                pos  << "[FAIL]" << message->GetLineNumber() << "> "
+                    << *v8::String::Utf8Value(message->Get());
+                return;
+            }
+        }
+    }
+
+
+}
+
 bool Scripting_engine::load(const std::string& file)
 {
     std::stringstream str_file;
@@ -203,6 +229,7 @@ FUNCTION_DEFINE(Scripting_engine, bind)
         v8::Handle<v8::Function> function 
             = v8::Handle<v8::Function>::Cast(function_repr);
         self->bindings.insert(key, function);
+        return v8::Undefined();
     } else {
         return v8::Exception::TypeError(
                 v8::String::New(

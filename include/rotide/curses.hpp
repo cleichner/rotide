@@ -110,8 +110,10 @@ public:
     void wait();
     void line();
     void resize();
+    void clear();
     bool get(char* c);
     Curses_pos& at(const int row, const int col);
+    char last_key;
 private:
     Curses_pos pos;
     curses_lib::WINDOW* active;

@@ -38,4 +38,4 @@ include_directories(
     ${V8_INCLUDE_DIR}
     )
 add_executable(ro ${SOURCES})
-target_link_libraries(ro -lncursesw ${V8_LIBRARY})
+target_link_libraries(ro -lncursesw ${V8_LIBRARY_DEBUG})

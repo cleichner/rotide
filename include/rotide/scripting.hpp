@@ -53,12 +53,36 @@ public:
         node->functions.push_back(v8::Persistent<v8::Function>::New(fun));
     }
 
-    void remove(const std::string& str)
+    bool get(const char s, const Function_list** funs)
     {
+        Key_mapping::iterator kit = keys.find(s);
+        if (kit != keys.end()) {
+            *funs = &kit->second.functions;
+            return true;
+        }
+        return false;
     }
 
     bool get(const std::string& str, Function_list* funs)
     {
+        Key_mapping* mapping = &keys;
+        Key_mapping::iterator kit;
+        for (std::string::const_iterator cit = str.begin(),
+                end = str.end();
+                cit != end;
+                ++cit)
+        {
+            kit = mapping->find(*cit);
+            if (kit == mapping->end() && (cit + 1) != str.end()) {
+                return false;
+            } else if (kit == mapping->end() && (cit + 1) == str.end()) {
+                funs = &kit->second.functions;
+                return true;
+            } else {
+                mapping = &kit->second.children;
+            }
+        }
+
         return false;
     }
 
@@ -74,6 +98,7 @@ public:
     v8::Handle<v8::Object> object;               // Engine namespace
     v8::Persistent<v8::FunctionTemplate> tmpl;  // Function template
     v8::Persistent<v8::Context> context;        // Engine context
+    void think();
     Curses* curses;
     Curses_pos* active_pos;
     Key_engine bindings;
