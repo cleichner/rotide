@@ -26,7 +26,7 @@ Scripting_engine::Scripting_engine(Curses* curses)
     Curses_pos pos = curses->at(0, 0);
     Curses_color GOOD = COLOR(GREEN, BLACK);
     Curses_color BAD = COLOR(RED, BLACK);
-    const char* RC_FILE = "rotide/rotide.js";
+    const char* RC_FILE = "runtime/rotide.js";
     const int STATUS = 55;
 
     pos << "Rotide Scripting Engine" << NEXT_LINE;
