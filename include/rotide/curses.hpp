@@ -23,6 +23,10 @@
 #include <string>
 #include <vector>
 
+namespace curses_lib {
+#include <ncurses.h>
+}
+
 typedef std::vector<int> Color_list;
 
 struct Curses_color {
@@ -66,12 +70,16 @@ enum Curses_style
 enum Curses_action
 {
     NEXT_LINE = BIT(1),
-    RESET = BIT(2)
+    RESET = BIT(2),
+    HLINE = BIT(3),
 };
 
-struct Curses_pos {
+class Curses_pos {
+public:
     Color_list color_ids;
     int col, row;
+    curses_lib::WINDOW* active;
+
     Curses_pos() : col(0), row(0) { }
 
     template <class T>
@@ -91,6 +99,8 @@ struct Curses_pos {
     void print(const std::string& s);
 };
 
+typedef std::vector<curses_lib::WINDOW*> Buffer_list;
+
 class Curses {
 public:
     Curses();
@@ -98,10 +108,14 @@ public:
     void refresh();
     void shutdown();
     void wait();
+    void line();
+    void resize();
     bool get(char* c);
     Curses_pos& at(const int row, const int col);
 private:
     Curses_pos pos;
+    curses_lib::WINDOW* active;
+    Buffer_list buffers;
 };
 
 #endif // ROTIDE_CURSES_HPP

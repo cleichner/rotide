@@ -8,9 +8,9 @@ int main(int argc, char** argv)
     setlocale(LC_ALL, "");
 
     Curses curses;
-    curses.refresh();
-
     Scripting_engine engine(&curses);
+
+    curses.refresh();
 
     char c = '\0';
 
@@ -23,7 +23,8 @@ int main(int argc, char** argv)
             at.row++;
             at.col = 0;
         }
-        
+
+        curses.refresh();
     }
     return 0;
 }

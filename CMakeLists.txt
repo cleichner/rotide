@@ -28,6 +28,7 @@ set(SOURCES
     src/rotide.cc
     src/curses.cc
     src/scripting.cc
+    src/js/core.cc
     )
 
 include_directories(
