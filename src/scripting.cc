@@ -5,13 +5,46 @@
 
 #include <sstream>
 #include <fstream>
-#include <cassert>
 #include <iostream>
 #include <string>
+
+#include <cassert>
+#include <cstring>
+
+#include <linux/input.h>
 
 namespace {
 Accessors accessors[] = {
     ACCESSOR_MAP(Scripting_engine, insert_mode),
+    ACCESSOR_MAP(Scripting_engine, status),
+    ACCESSOR_GETTER_MAP(Scripting_engine, CTRL_A),
+    ACCESSOR_GETTER_MAP(Scripting_engine, CTRL_B),
+    ACCESSOR_GETTER_MAP(Scripting_engine, CTRL_C),
+    ACCESSOR_GETTER_MAP(Scripting_engine, CTRL_D),
+    ACCESSOR_GETTER_MAP(Scripting_engine, CTRL_E),
+    ACCESSOR_GETTER_MAP(Scripting_engine, CTRL_F),
+    ACCESSOR_GETTER_MAP(Scripting_engine, CTRL_G),
+    ACCESSOR_GETTER_MAP(Scripting_engine, CTRL_H),
+    ACCESSOR_GETTER_MAP(Scripting_engine, CTRL_I),
+    ACCESSOR_GETTER_MAP(Scripting_engine, CTRL_J),
+    ACCESSOR_GETTER_MAP(Scripting_engine, CTRL_K),
+    ACCESSOR_GETTER_MAP(Scripting_engine, CTRL_L),
+    ACCESSOR_GETTER_MAP(Scripting_engine, CTRL_M),
+    ACCESSOR_GETTER_MAP(Scripting_engine, CTRL_N),
+    ACCESSOR_GETTER_MAP(Scripting_engine, CTRL_O),
+    ACCESSOR_GETTER_MAP(Scripting_engine, CTRL_P),
+    ACCESSOR_GETTER_MAP(Scripting_engine, CTRL_Q),
+    ACCESSOR_GETTER_MAP(Scripting_engine, CTRL_R),
+    ACCESSOR_GETTER_MAP(Scripting_engine, CTRL_S),
+    ACCESSOR_GETTER_MAP(Scripting_engine, CTRL_T),
+    ACCESSOR_GETTER_MAP(Scripting_engine, CTRL_U),
+    ACCESSOR_GETTER_MAP(Scripting_engine, CTRL_V),
+    ACCESSOR_GETTER_MAP(Scripting_engine, CTRL_W),
+    ACCESSOR_GETTER_MAP(Scripting_engine, CTRL_X),
+    ACCESSOR_GETTER_MAP(Scripting_engine, CTRL_Y),
+    ACCESSOR_GETTER_MAP(Scripting_engine, CTRL_Z),
+    ACCESSOR_GETTER_MAP(Scripting_engine, I),
+    ACCESSOR_GETTER_MAP(Scripting_engine, ESC),
     { NULL, NULL, NULL }
 };
 
@@ -28,6 +61,8 @@ const int STATUS = 55;
 Scripting_engine::Scripting_engine(Curses* curses)
     : curses(curses)
 {
+    good = false;
+
     // Read in the source
     Curses_pos pos = curses->at(0, 0);
     active_pos = &pos;
@@ -108,12 +143,79 @@ Scripting_engine::Scripting_engine(Curses* curses)
             << *v8::String::Utf8Value(message->Get());
         return;
     }
+
+    good = true;
 }
 
-void Scripting_engine::think()
+int is_key_pressed(int fd, int key)
 {
-    const Function_list* list;
-    if (bindings.get(curses->last_key, &list)) {
+        char key_b[KEY_MAX/8 + 1];
+
+        memset(key_b, 0, sizeof(key_b));
+        ioctl(fd, EVIOCGKEY(sizeof(key_b)), key_b);
+
+        return !!(key_b[key/8] & (1<<(key % 8)));
+}
+
+void Scripting_engine::handle_key_combination()
+{
+    Curses_pos status = curses->status();
+    if (curses->last_key >= CTRL_A 
+            && curses->last_key <= CTRL_Z
+            && curses->last_key != CTRL_J) {
+        key_combination.push_back(curses->last_key);
+        status << CLEAR;
+        for (Key_list::const_iterator cit = key_combination.begin(),
+                        end = key_combination.end();
+                        cit != end;
+                        ++cit)
+        {
+            status << KEY_STR(*cit);
+            if ((cit + 1) != end) 
+                status << "-";
+        }
+    } else {
+        const Function_list* list;
+
+        if (!insert_mode()) {
+            status << CLEAR << COLOR(WHITE, RED) << BOLD;
+        }
+
+        if (curses->last_key == CTRL_J) {
+            if (!bindings.get(key_combination, &list)) {
+                if (insert_mode()) {
+                    return;
+                }
+
+                status << "ERROR: ";
+                for (Key_list::const_iterator cit = key_combination.begin(),
+                        end = key_combination.end();
+                        cit != end;
+                        ++cit)
+                {
+                    status << KEY_STR(*cit);
+                    if ((cit + 1) != end) 
+                        status << "-";
+                }
+                status << " is not an editor command." << RESET;
+                key_combination.clear();
+                return;
+            }
+        } else if (!bindings.get(curses->last_key, &list)) {
+            if (insert_mode()) {
+                return;
+            }
+
+            status 
+                << "ERROR: " 
+                << KEY_STR(curses->last_key) << " is not an editor command." 
+                << RESET;
+            key_combination.clear();
+            return;
+        }
+
+        status << RESET << CLEAR;
+
         v8::HandleScope handle;
         v8::Context::Scope scope(context);
         v8::TryCatch tc;
@@ -131,9 +233,15 @@ void Scripting_engine::think()
                 return;
             }
         }
+
+        key_combination.clear();
     }
 
+}
 
+void Scripting_engine::think()
+{
+    handle_key_combination();
 }
 
 bool Scripting_engine::load(const std::string& file)
@@ -222,19 +330,19 @@ FUNCTION_DEFINE(Scripting_engine, test)
 FUNCTION_DEFINE(Scripting_engine, bind)
 {
     Scripting_engine* self = unwrap<Scripting_engine>(args.Holder());
-    std::string key;
+    Key_list keys;
     v8::Handle<v8::Value> key_repr(args[0]);
     v8::Handle<v8::Value> function_repr(args[1]);
-    if (smart_convert(key_repr, &key) && function_repr->IsFunction()) {
+    if (smart_convert(key_repr, &keys) && function_repr->IsFunction()) {
         v8::Handle<v8::Function> function 
             = v8::Handle<v8::Function>::Cast(function_repr);
-        self->bindings.insert(key, function);
+        self->bindings.insert(keys, function);
         return v8::Undefined();
     } else {
         return v8::Exception::TypeError(
                 v8::String::New(
                     "The definition of this method is: \
-                    ro.bind(String, Function). You provided the wrong types \
+                    ro.bind([Keys], Function). You provided the wrong types \
                     for the arguments to this method."));
     }
 }
@@ -254,8 +362,122 @@ ACCESSOR_GETTER_DEFINE(Scripting_engine, insert_mode)
 
 ACCESSOR_SETTER_DEFINE(Scripting_engine, insert_mode)
 {
+    Scripting_engine* self = unwrap<Scripting_engine>(info.Holder());
+    if (!smart_convert(value, &self->attrs.insert_mode)) {
+        v8::Exception::Error(
+                v8::String::New(
+                    "insert_mode is either true or false."));
+    }
 }
 
+ACCESSOR_GETTER_DEFINE(Scripting_engine, status)
+{
+    Scripting_engine* self = unwrap<Scripting_engine>(info.Holder());
+    v8::Handle<v8::Value> status_repr;
+    if (smart_convert(self->attrs.status, &status_repr)) {
+        return status_repr;
+    } else {
+        return v8::Exception::Error(
+                v8::String::New(
+                    "Fatal error in converting type of status"));
+    }
+}
+
+ACCESSOR_SETTER_DEFINE(Scripting_engine, status)
+{
+    Scripting_engine* self = unwrap<Scripting_engine>(info.Holder());
+    if (!smart_convert(value, &self->attrs.status)) {
+        v8::Exception::Error(
+                v8::String::New(
+                    "status is a string"));
+    }
+    self->curses->status() << self->attrs.status;
+}
+
+
+ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_A) 
+{ return v8::Int32::New(CTRL_A); }
+
+ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_B)
+{ return v8::Int32::New(CTRL_B); }
+
+ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_C)
+{ return v8::Int32::New(CTRL_C); }
+
+ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_D)
+{ return v8::Int32::New(CTRL_D); }
+
+ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_E)
+{ return v8::Int32::New(CTRL_E); }
+
+ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_F)
+{ return v8::Int32::New(CTRL_F); }
+
+ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_G)
+{ return v8::Int32::New(CTRL_G); }
+
+ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_H)
+{ return v8::Int32::New(CTRL_H); }
+
+ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_I)
+{ return v8::Int32::New(CTRL_I); }
+
+ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_J)
+{ return v8::Int32::New(CTRL_J); }
+
+ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_K)
+{ return v8::Int32::New(CTRL_K); }
+
+ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_L)
+{ return v8::Int32::New(CTRL_L); }
+
+ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_M)
+{ return v8::Int32::New(CTRL_M); }
+
+ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_N)
+{ return v8::Int32::New(CTRL_N); }
+
+ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_O)
+{ return v8::Int32::New(CTRL_O); }
+
+ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_P)
+{ return v8::Int32::New(CTRL_P); }
+
+ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_Q)
+{ return v8::Int32::New(CTRL_Q); }
+
+ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_R)
+{ return v8::Int32::New(CTRL_R); }
+
+ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_S)
+{ return v8::Int32::New(CTRL_S); }
+
+ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_T)
+{ return v8::Int32::New(CTRL_T); }
+
+ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_U)
+{ return v8::Int32::New(CTRL_U); }
+
+ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_V)
+{ return v8::Int32::New(CTRL_V); }
+
+ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_W)
+{ return v8::Int32::New(CTRL_W); }
+
+ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_X)
+{ return v8::Int32::New(CTRL_X); }
+
+ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_Y)
+{ return v8::Int32::New(CTRL_Y); }
+
+ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_Z)
+{ return v8::Int32::New(CTRL_Z); }
+
+ACCESSOR_GETTER_DEFINE(Scripting_engine, I)
+{ return v8::Int32::New(105); }
+
+ACCESSOR_GETTER_DEFINE(Scripting_engine, ESC)
+{ return v8::Int32::New(27); }
 
 v8::Handle<v8::Object> Scripting_engine::wrap_class_as_object(
         v8::Handle<v8::FunctionTemplate>* function_tmpl,

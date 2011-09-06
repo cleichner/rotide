@@ -33,7 +33,7 @@ bool convert(const int32_t& from, v8::Handle<v8::Value>* to)
 
 bool convert(const v8::Handle<v8::Value>& from, int64_t* to)
 {
-  if (from->IsNumber()) {
+  if (from->IsNumber() && !from->IsUndefined()) {
     (*to) = from->IntegerValue();
     return true;
   }

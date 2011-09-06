@@ -10,21 +10,33 @@ int main(int argc, char** argv)
     Curses curses;
     Scripting_engine engine(&curses);
 
-    Curses_pos at = curses.at(0, 0);
-    curses.clear();
-    curses.refresh();
+    if (engine.good)
+        curses.clear();
 
     char c = '\0';
+    bool insert_mode;
+
+    curses.status() << engine.status(); 
+    curses.draw_status_bar();
+    Curses_pos at = curses.at(0, 0);
+    curses.refresh();
 
     while (curses.get(&c)) {
-        at << (int)c;
+        insert_mode = engine.insert_mode();
+        engine.think();
 
-        if (c == '\n') {
-            at.row++;
-            at.col = 0;
+        if (!engine.insert_mode())
+            insert_mode = false;
+
+        if (insert_mode) {
+            at << c;
+
+            if (c == '\n') {
+                at.row++;
+                at.col = 0;
+            }
         }
 
-        engine.think();
         curses.refresh();
     }
     return 0;

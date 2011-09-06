@@ -1,6 +1,8 @@
 #include "rotide/curses.hpp"
+
 #include <csignal>
 #include <cassert>
+#include <cstdlib>
 
 using namespace curses_lib;
 
@@ -29,6 +31,9 @@ Curses::Curses()
     int row, col;
     std::signal(SIGWINCH, terminal_resized);
 
+    if (getenv ("ESCDELAY") == NULL)
+        ESCDELAY = 25;
+
     initscr();
     start_color();
     raw();
@@ -49,6 +54,14 @@ Curses::Curses()
 Curses::~Curses()
 {
     shutdown();
+}
+
+void Curses::draw_status_bar()
+{
+    int row, col;
+    getmaxyx(active, row, col);
+    wmove(active, row - 2, 0);
+    whline(active, ACS_HLINE, col);
 }
 
 void Curses::clear()
@@ -81,6 +94,7 @@ void Curses::refresh()
 {
     ::refresh();
     wrefresh(active);
+    wmove(active, pos.row, pos.col);
 }
 
 void Curses::line()
@@ -98,7 +112,7 @@ void Curses::wait()
 bool Curses::get(char* s)
 {
     *s = getch();
-    last_key = *s;
+    last_key = (int)*s;
     if (*s == 3)
         return false;
     return true;
@@ -112,6 +126,18 @@ Curses_pos& Curses::at(const int x, const int y)
     pos.active = active;
     pos.col = pos.col == 0 ? 1 : pos.col;
     pos.row = pos.row == 0 ? 1 : pos.row;
+    wmove(active, pos.row, pos.col);
+    return pos;
+}
+
+Curses_pos& Curses::status()
+{
+    int row, col;
+    getmaxyx(active, row, col);
+    pos.col = 0;
+    pos.row = row - 1;
+    pos.active = active;
+    pos.move = false;
     return pos;
 }
 
@@ -150,8 +176,10 @@ Curses_pos& Curses_pos::operator<<(const Curses_action& ca)
         int mcol, mrow;
         getmaxyx(stdscr, mrow, mcol);
         mvwhline(active, row, 1, ACS_HLINE, mcol - 2);
+    } else if (action & CLEAR) {
+        wmove(active, row, 0);
+        wclrtoeol(active);
     }
-
     return *this;
 }
 
