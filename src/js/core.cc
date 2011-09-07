@@ -18,7 +18,13 @@
 #include <rotide/js/core.hpp>
 #include <rotide/curses.hpp>
 
+// Define the accessors and functions to the JavaScript core.
+//
+// ro.core =
+//      enable  : function ([programs])
+//
 namespace {
+
 Accessors accessors[] = {
     { NULL, NULL, NULL }
 };
@@ -27,27 +33,31 @@ Function_mapping functions[] = {
     FUNCTION_MAP(Core, enable),
     { NULL, NULL, NULL }
 };
-}
 
-v8::Handle<v8::Object> Core::wrap_class_as_object(Scripting_engine* eng)
+} // namespace
+
+// Wrap the class as an object so it can be exposed to the JavaScript
+Handle<Object> Core::wrap_class_as_object(Scripting_engine* eng)
 {
-    v8::HandleScope scope;
-    v8::Handle<v8::FunctionTemplate> core_tmpl = v8::FunctionTemplate::New();
+    HandleScope scope;
+    Handle<FunctionTemplate> core_tmpl = FunctionTemplate::New();
     generate_fun_tmpl(&core_tmpl, accessors, functions, NULL);
-    core_tmpl->SetClassName(v8::String::New("core"));
-    v8::Handle<v8::Object> core = core_tmpl->GetFunction()->NewInstance();
+    core_tmpl->SetClassName(String::New("core"));
+    Handle<Object> core = core_tmpl->GetFunction()->NewInstance();
     core->SetPointerInInternalField(0, eng);
     return scope.Close(core);
 }
 
+// JavaScript method: ro.core.enable()
+// Enables units in the engine that are defined as JavaScript modules.
 FUNCTION_DEFINE(Core, enable)
 {
     Scripting_engine* engine = unwrap<Scripting_engine>(args.Holder());
-    v8::Handle<v8::Array> array_val = args[0]->ToObject().As<v8::Array>();
+    Handle<Array> array_val = args[0]->ToObject().As<Array>();
 
     for (int i = 0, l = array_val->Length(); i < l; i++) {
-        engine->load(*v8::String::AsciiValue(array_val->Get(i)));
+        engine->load(*String::AsciiValue(array_val->Get(i)));
     }
 
-    return v8::Undefined();
+    return Undefined();
 }

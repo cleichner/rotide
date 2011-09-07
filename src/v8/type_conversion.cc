@@ -14,6 +14,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+/*
+ * TODO(justinvh): DANGER WILL ROBINSON
+ * This file is undocumented for now. 
+ */
+
 #include <rotide/v8/type_conversion.hpp>
 #include <cstring>
 

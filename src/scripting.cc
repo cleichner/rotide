@@ -27,9 +27,21 @@
 #include <cassert>
 #include <cstring>
 
-#include <linux/input.h>
+using namespace v8;
 
+// Define the accessors and functions to the ro object.
+//
+// ro =
+//      insert_mode         : boolean
+//      status              : string
+//      CTRL_A .. CTRL_Z    : integers
+//      A .. Z              : integers
+//
+//      test    : function ()
+//      bind    : function ([Key], function)
+//
 namespace {
+
 Accessors accessors[] = {
     ACCESSOR_MAP(Scripting_engine, insert_mode),
     ACCESSOR_MAP(Scripting_engine, status),
@@ -70,26 +82,36 @@ Function_mapping functions[] = {
     { NULL, NULL, NULL }
 };
 
+// Status column for startup
+// TODO(justinvh): This shouldn't be a constant.
 const int STATUS = 55;
 
-}
+} // namespace
 
+// Construct a new scripting instance relative to
+// a curses instance.
 Scripting_engine::Scripting_engine(Curses* curses)
     : curses(curses)
 {
+    assert(curses != NULL && "Null instance of curses passed!");
+
     good = false;
 
     // Read in the source
     Curses_pos pos = curses->at(0, 0);
     active_pos = &pos;
+
     const char* RC_FILE = "runtime/rotide.js";
 
+    // Describe the event
     pos << "Rotide Scripting Engine" << NEXT_LINE;
     pos << HLINE << NEXT_LINE;
     pos  << "Initializing scripting engine" ;
 
+    // Open the file
     std::ifstream rc(RC_FILE, std::ifstream::in);
 
+    // Alert the user if the read goes wrong.
     pos.col = STATUS;
     if (!rc.good()) {
         pos  << "[FAIL]" << NEXT_LINE
@@ -100,6 +122,7 @@ Scripting_engine::Scripting_engine(Curses* curses)
 
     pos << "[GOOD]" << NEXT_LINE;
 
+    // Read the file into a stream
     std::stringstream rc_stream;
     rc_stream << rc.rdbuf();
     const std::string& buf = rc_stream.str();
@@ -108,61 +131,64 @@ Scripting_engine::Scripting_engine(Curses* curses)
     pos.col = STATUS;
 
     // Create the execution scope
-    v8::HandleScope exec_scope;
-    v8::Handle<v8::String> script = 
-        v8::String::New(buf.c_str(), buf.size());
+    HandleScope exec_scope;
+    Handle<String> script = 
+        String::New(buf.c_str(), buf.size());
 
     // Create the global template and reserve internal fields
-    global = v8::ObjectTemplate::New();
+    global = ObjectTemplate::New();
     global->SetInternalFieldCount(1);
 
     // Create the execution context, enter it.
-    context = v8::Context::New(NULL, global);
-    v8::Context::Scope scope(context);
+    context = Context::New(NULL, global);
+    Context::Scope scope(context);
 
     // Create the engine object
-    tmpl = v8::Persistent<v8::FunctionTemplate>();
+    tmpl = Persistent<FunctionTemplate>();
     object = wrap_class_as_object(&tmpl, this, NULL);
 
     // Set the internal field to a reference of this
     // Allow the object to reference itself.
-    v8::Handle<v8::Object> proxy = context->Global();
-    v8::Handle<v8::Object> proto = proxy->GetPrototype().As<v8::Object>();
+    Handle<Object> proxy = context->Global();
+    Handle<Object> proto = proxy->GetPrototype().As<Object>();
     proto->SetPointerInInternalField(0, this);
-    proto->Set(v8::String::New("ro"), object);
+    proto->Set(String::New("ro"), object);
 
-    v8::Handle<v8::Object> core = Core::wrap_class_as_object(this);
-    object->Set(v8::String::New("core"), core);
+    // Wrap the core object
+    Handle<Object> core = Core::wrap_class_as_object(this);
+    object->Set(String::New("core"), core);
 
     pos << "[GOOD]" << NEXT_LINE << "Compiling";
     pos.col = STATUS;
 
     // Compile the code
-    v8::TryCatch tc;
-    v8::Handle<v8::Script> compiled = v8::Script::Compile(script);
+    TryCatch tc;
+    Handle<Script> compiled = Script::Compile(script);
     if (tc.HasCaught()) {
-        v8::Handle<v8::Message> message = tc.Message();
+        Handle<Message> message = tc.Message();
         pos  << "[FAIL]" << NEXT_LINE
             << "<" << RC_FILE << ":" << message->GetLineNumber() << "> "
-            << *v8::String::Utf8Value(message->Get());
+            << *String::Utf8Value(message->Get());
         return;
     }
 
     pos << "[GOOD]" << NEXT_LINE << "Running";
 
     // Run the script
-    v8::Handle<v8::Value> result = compiled->Run();
+    Handle<Value> result = compiled->Run();
     if (tc.HasCaught()) {
-        v8::Handle<v8::Message> message = tc.Message();
+        Handle<Message> message = tc.Message();
         pos << "[FAIL]" << NEXT_LINE
             << "<" << RC_FILE << ":" << message->GetLineNumber() << "> "
-            << *v8::String::Utf8Value(message->Get());
+            << *String::Utf8Value(message->Get());
         return;
     }
 
     good = true;
 }
 
+/*
+// hack for figuring if a key is pressed based off of the EVIO linux/input.h
 int is_key_pressed(int fd, int key)
 {
         char key_b[KEY_MAX/8 + 1];
@@ -172,59 +198,100 @@ int is_key_pressed(int fd, int key)
 
         return !!(key_b[key/8] & (1<<(key % 8)));
 }
+*/
 
+// A key combination is any series of keys pressed that are defined to
+// have a callback to a JavaScript function.
+//
+// The basic idea is that as keys are pressed they are put into a vector
+// that holds the key series. Depending on the type of press, the commands
+// are handled accordingly.
+//
+// Any CTRL+<A..Z> combination can be appended to one another until either
+// CTRL+J or ENTER is hit. This signals the end of a key combination.
+//
+// TODO(justinvh): Commands should be able to take input, so perhaps being
+// aware of the last key and knowing the engine is in a CTRL state will allow
+// stuff like: "CTRL+A-CTRL+F Hello World" to be a command.
+//
+// Any key press is handled independently and is greedy.
+//
+// EXAMPLE:
+//  ro.bind([ro.A, ro.B, ro.C], function () { ro.status = "ABCs!"; })
+//  /*  This binding below is greedy and consequently will cause the above
+//      binding to never be called.  */
+//  ro.bind([ro.A], function () { ro.status = "Hello!"; });
+//
 void Scripting_engine::handle_key_combination()
 {
+    Key_list::const_iterator kcit, end;
     Curses_pos status = curses->status();
-    if (curses->last_key >= CTRL_A 
-            && curses->last_key <= CTRL_Z
-            && curses->last_key != CTRL_J) {
-        key_combination.push_back(curses->last_key);
+    int key = curses->last_key;
+
+    // If the key pressed is any variation of CTRL+A to CTRL+Z
+    // excluding CTRL+J (since ENTER holds the same values traditionally)
+    // then append the key to the vector and update the status.
+    if (key >= CTRL_A && key <= CTRL_Z && key != CTRL_J) {
+        key_combination.push_back(key);
         status << CLEAR;
-        for (Key_list::const_iterator cit = key_combination.begin(),
-                        end = key_combination.end();
-                        cit != end;
-                        ++cit)
+        for (kcit = key_combination.begin(), end = key_combination.end();
+                kcit != end;
+                ++kcit)
         {
-            status << KEY_STR(*cit);
-            if ((cit + 1) != end) 
+            status << KEY_STR(*kcit);
+            if ((kcit + 1) != end) 
                 status << "-";
         }
+    // Now were' in the case that we did not press CTRL+A .. CTRL+Z and
+    // instead are just typing a single command.
     } else {
         const Function_list* list;
 
-        if (!insert_mode()) {
-            status << CLEAR << COLOR(WHITE, RED) << BOLD;
-        }
+        // If we are in insert mode then we don't want to parse
+        // any single key press commands.
+        // TODO(justinvh): We can't really do this yet. The distinction
+        // between a command mode and an editing mode is not truly defined.
+        
+        // if (insert_mode()) 
+        //  return;
+        if (key == CTRL_J && key_combination.empty())
+            return;
 
-        if (curses->last_key == CTRL_J) {
+        if (!insert_mode()) 
+            status << CLEAR << COLOR(WHITE, RED) << BOLD;
+
+        // Remember, CTRL+J is the same as ENTER.
+        if (key == CTRL_J) {
+            // If the current key combination does not produce a binding
+            // then we need to alert the user.
             if (!bindings.get(key_combination, &list)) {
-                if (insert_mode()) {
-                    return;
-                }
+                if (insert_mode()) return;
 
                 status << "ERROR: ";
-                for (Key_list::const_iterator cit = key_combination.begin(),
+                for (kcit = key_combination.begin(),
                         end = key_combination.end();
-                        cit != end;
-                        ++cit)
+                        kcit != end;
+                        ++kcit)
                 {
-                    status << KEY_STR(*cit);
-                    if ((cit + 1) != end) 
+                    status << KEY_STR(*kcit);
+                    if ((kcit + 1) != end) 
                         status << "-";
                 }
                 status << " is not an editor command." << RESET;
                 key_combination.clear();
                 return;
             }
-        } else if (!bindings.get(curses->last_key, &list)) {
-            if (insert_mode()) {
-                return;
-            }
+        }
+        // Now we are just typing a single key. So, parse the command
+        // as single key press.
+        // TODO(justinvh):  Support multiple keys. A CTRL+<A..Z> mode is
+        //                  different then a character mode. 
+        else if (!bindings.get(key, &list)) {
+            if (insert_mode()) return;
 
             status 
                 << "ERROR: " 
-                << KEY_STR(curses->last_key) << " is not an editor command." 
+                << KEY_STR(key) << " is not an editor command." 
                 << RESET;
             key_combination.clear();
             return;
@@ -232,20 +299,24 @@ void Scripting_engine::handle_key_combination()
 
         status << RESET << CLEAR;
 
-        v8::HandleScope handle;
-        v8::Context::Scope scope(context);
-        v8::TryCatch tc;
+        // Now a valid function list has been generated. Create the
+        // execution context and call the JavaScript function.
+        HandleScope handle;
+        Context::Scope scope(context);
+        TryCatch tc;
         for (Function_list::const_iterator cit = list->begin(),
                 end = list->end();
                 cit != end;
                 ++cit)
         {
+            // TODO(justinvh):  A buffer object or some sort of exposed
+            //                  buffer should be available as an argument.
             (*cit)->Call(object, 0, NULL);
             if (tc.HasCaught()) {
                 Curses_pos pos = curses->at(0, 0);
-                v8::Handle<v8::Message> message = tc.Message();
-                pos  << "[FAIL]" << message->GetLineNumber() << "> "
-                    << *v8::String::Utf8Value(message->Get());
+                Handle<Message> message = tc.Message();
+                pos << "[FAIL]" << message->GetLineNumber() << "> "
+                    << *String::Utf8Value(message->Get());
                 return;
             }
         }
@@ -255,21 +326,33 @@ void Scripting_engine::handle_key_combination()
 
 }
 
+// When the engine thinks it needs to figure out key combinations,
+// what to call, and so on. It should just wrap various calls.
 void Scripting_engine::think()
 {
     handle_key_combination();
 }
 
+// Load a runtime/* file.
+// These files are going to be JavaScript source files relative
+// to the runtime/ directory.
+//
+// TODO(justinvh):  There needs to be a separation between the basic
+//                  runtime files and the local files of the user.
 bool Scripting_engine::load(const std::string& file)
 {
+    // The basic logic to open the file, create a stream, and error
+    // to the user if something bad goes wrong in the process.
     std::stringstream str_file;
     str_file << "runtime/" << file;
+
+    // Open file
     std::ifstream rc(str_file.str().c_str(), std::ifstream::in);
     Curses_pos& pos = *active_pos;
 
+    // Alert user that something is going on.
     pos << HLINE << NEXT_LINE;
     pos  << "Loading " << str_file.str();
-
     pos.col = STATUS;
     if (!rc.good()) {
         pos << "[FAIL]" << NEXT_LINE
@@ -281,6 +364,7 @@ bool Scripting_engine::load(const std::string& file)
     pos.col = STATUS;
     pos << "[GOOD]" << NEXT_LINE;
 
+    // Read in the stream
     std::stringstream rc_stream;
     rc_stream << rc.rdbuf();
     const std::string& buf = rc_stream.str();
@@ -289,25 +373,25 @@ bool Scripting_engine::load(const std::string& file)
     pos.col = STATUS;
 
     // Create the execution scope
-    v8::HandleScope exec_scope;
-    v8::Handle<v8::String> script = 
-        v8::String::New(buf.c_str(), buf.size());
+    HandleScope exec_scope;
+    Handle<String> script = 
+        String::New(buf.c_str(), buf.size());
 
     // Create the global template and reserve internal fields
-    v8::Context::Scope scope(context);
+    Context::Scope scope(context);
 
     // Create the engine object
     pos << "[GOOD]" << NEXT_LINE << "Compiling";
     pos.col = STATUS;
 
     // Compile the code
-    v8::TryCatch tc;
-    v8::Handle<v8::Script> compiled = v8::Script::Compile(script);
+    TryCatch tc;
+    Handle<Script> compiled = Script::Compile(script);
     if (tc.HasCaught()) {
-        v8::Handle<v8::Message> message = tc.Message();
+        Handle<Message> message = tc.Message();
         pos  << "[FAIL]" << NEXT_LINE
             << "<" << str_file.str() << ":" << message->GetLineNumber() << "> "
-            << *v8::String::Utf8Value(message->Get());
+            << *String::Utf8Value(message->Get());
         return false;
     }
 
@@ -315,12 +399,12 @@ bool Scripting_engine::load(const std::string& file)
     pos.col = STATUS;
 
     // Run the script
-    v8::Handle<v8::Value> result = compiled->Run();
+    Handle<Value> result = compiled->Run();
     if (tc.HasCaught()) {
-        v8::Handle<v8::Message> message = tc.Message();
+        Handle<Message> message = tc.Message();
         pos << "[FAIL]" << NEXT_LINE
             << "<" << str_file << ":" << message->GetLineNumber() << "> "
-            << *v8::String::Utf8Value(message->Get());
+            << *String::Utf8Value(message->Get());
         return false;
     }
 
@@ -328,185 +412,221 @@ bool Scripting_engine::load(const std::string& file)
     return true;
 }
 
+// Wrap the engine as an object so it can be exposed to the JavaScript
+Handle<Object> Scripting_engine::wrap_class_as_object(
+        Handle<FunctionTemplate>* function_tmpl,
+        Scripting_engine* instance,
+        Object_template_extension extensions)
+{
+    HandleScope scope;
+    if (function_tmpl->IsEmpty())
+        (*function_tmpl) = FunctionTemplate::New();
+    generate_fun_tmpl(function_tmpl, accessors, functions, NULL);
+    (*function_tmpl)->SetClassName(String::New("rotide"));
+    Handle<Function> ctor = (*function_tmpl)->GetFunction();
+    Local<Object> obj = ctor->NewInstance();
+    obj->SetInternalField(0, External::New(instance));
+    return scope.Close(obj);
+}
+
+// JavaScript method: ro.test()
+// Just tests various interactions with the engine.
 FUNCTION_DEFINE(Scripting_engine, test)
 {
     Scripting_engine* self = unwrap<Scripting_engine>(args.Holder());
-    v8::Handle<v8::Value> arg_x = args[0];
-    v8::Handle<v8::Value> arg_y = args[1];
-    v8::Handle<v8::Value> arg_str = args[2];
+    Handle<Value> arg_x = args[0];
+    Handle<Value> arg_y = args[1];
+    Handle<Value> arg_str = args[2];
 
     int x = arg_x->Int32Value();
     int y = arg_y->Int32Value();
-    std::string str = *v8::String::Utf8Value(arg_str->ToString());
+    std::string str = *String::Utf8Value(arg_str->ToString());
 
     self->curses->at(x,y) << "Says: " << str << NEXT_LINE;
-    return v8::Undefined();
+    return Undefined();
 }
 
+// JavaScript method: ro.bind([Int32], Function)
+// Binds a key combination list to a function callback.
+//
+// EXAMPLE:
+//  ro.bind([ro.A, ro.B, ro.C], function () { ro.status = "ABCs!"; })
 FUNCTION_DEFINE(Scripting_engine, bind)
 {
+    // Unwrap object
     Scripting_engine* self = unwrap<Scripting_engine>(args.Holder());
     Key_list keys;
-    v8::Handle<v8::Value> key_repr(args[0]);
-    v8::Handle<v8::Value> function_repr(args[1]);
+
+    // Get keys and function
+    Handle<Value> key_repr(args[0]);
+    Handle<Value> function_repr(args[1]);
+
+    // Convert the keys to a vector and insert into the local bindings
     if (smart_convert(key_repr, &keys) && function_repr->IsFunction()) {
-        v8::Handle<v8::Function> function 
-            = v8::Handle<v8::Function>::Cast(function_repr);
+        Handle<Function> function 
+            = Handle<Function>::Cast(function_repr);
         self->bindings.insert(keys, function);
-        return v8::Undefined();
+        return Undefined();
     } else {
-        return v8::Exception::TypeError(
-                v8::String::New(
+        return Exception::TypeError(
+                String::New(
                     "The definition of this method is: \
                     ro.bind([Keys], Function). You provided the wrong types \
                     for the arguments to this method."));
     }
 }
 
+// JavaScript getter: ro.insert_mode : boolean
+// If true the editor is in insert mode. Otherwise it is in a command mode.
+// Returns the value of insert_mode
 ACCESSOR_GETTER_DEFINE(Scripting_engine, insert_mode)
 {
     Scripting_engine* self = unwrap<Scripting_engine>(info.Holder());
-    v8::Handle<v8::Value> insert_mode_repr;
+    Handle<Value> insert_mode_repr;
     if (smart_convert(self->attrs.insert_mode, &insert_mode_repr)) {
         return insert_mode_repr;
     } else {
-        return v8::Exception::Error(
-                v8::String::New(
+        return Exception::Error(
+                String::New(
                     "Fatal error in converting type of insert_mode"));
     }
 }
-
+// JavaScript getter: ro.insert_mode : boolean
+// If true the editor is in insert mode. Otherwise it is in a command mode.
+// Sets the value of insert_mode
 ACCESSOR_SETTER_DEFINE(Scripting_engine, insert_mode)
 {
     Scripting_engine* self = unwrap<Scripting_engine>(info.Holder());
     if (!smart_convert(value, &self->attrs.insert_mode)) {
-        v8::Exception::Error(
-                v8::String::New(
+        Exception::Error(
+                String::New(
                     "insert_mode is either true or false."));
     }
 }
 
+// JavaScript getter: ro.status : string
+// Updates the status bar of the editor.
+//
+// TODO(justinvh): There needs to be a more succint way of doing this.
+// Giving full access to the status bar can cause a lot of problems where
+// multiple scripts want to take the status bar. Maybe doing a stack of status
+// messages that can be history-ized for viewing is more appropriate.
 ACCESSOR_GETTER_DEFINE(Scripting_engine, status)
 {
     Scripting_engine* self = unwrap<Scripting_engine>(info.Holder());
-    v8::Handle<v8::Value> status_repr;
+    Handle<Value> status_repr;
     if (smart_convert(self->attrs.status, &status_repr)) {
         return status_repr;
     } else {
-        return v8::Exception::Error(
-                v8::String::New(
+        return Exception::Error(
+                String::New(
                     "Fatal error in converting type of status"));
     }
 }
+
+// JavaScript getter: ro.status : string
+// Updates the status bar of the editor.
+//
+// TODO(justinvh): There needs to be a more succint way of doing this.
+// Giving full access to the status bar can cause a lot of problems where
+// multiple scripts want to take the status bar. Maybe doing a stack of status
+// messages that can be history-ized for viewing is more appropriate.
 
 ACCESSOR_SETTER_DEFINE(Scripting_engine, status)
 {
     Scripting_engine* self = unwrap<Scripting_engine>(info.Holder());
     if (!smart_convert(value, &self->attrs.status)) {
-        v8::Exception::Error(
-                v8::String::New(
+        Exception::Error(
+                String::New(
                     "status is a string"));
     }
     self->curses->status() << self->attrs.status;
 }
 
 
+// JavaScript getters: ro.CTRL_<A..Z>: Int32
+// Returns the corresponding value for a CTRL+<A..Z> press.
+
 ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_A) 
-{ return v8::Int32::New(CTRL_A); }
+{ return Int32::New(CTRL_A); }
 
 ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_B)
-{ return v8::Int32::New(CTRL_B); }
+{ return Int32::New(CTRL_B); }
 
 ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_C)
-{ return v8::Int32::New(CTRL_C); }
+{ return Int32::New(CTRL_C); }
 
 ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_D)
-{ return v8::Int32::New(CTRL_D); }
+{ return Int32::New(CTRL_D); }
 
 ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_E)
-{ return v8::Int32::New(CTRL_E); }
+{ return Int32::New(CTRL_E); }
 
 ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_F)
-{ return v8::Int32::New(CTRL_F); }
+{ return Int32::New(CTRL_F); }
 
 ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_G)
-{ return v8::Int32::New(CTRL_G); }
+{ return Int32::New(CTRL_G); }
 
 ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_H)
-{ return v8::Int32::New(CTRL_H); }
+{ return Int32::New(CTRL_H); }
 
 ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_I)
-{ return v8::Int32::New(CTRL_I); }
+{ return Int32::New(CTRL_I); }
 
 ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_J)
-{ return v8::Int32::New(CTRL_J); }
+{ return Int32::New(CTRL_J); }
 
 ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_K)
-{ return v8::Int32::New(CTRL_K); }
+{ return Int32::New(CTRL_K); }
 
 ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_L)
-{ return v8::Int32::New(CTRL_L); }
+{ return Int32::New(CTRL_L); }
 
 ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_M)
-{ return v8::Int32::New(CTRL_M); }
+{ return Int32::New(CTRL_M); }
 
 ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_N)
-{ return v8::Int32::New(CTRL_N); }
+{ return Int32::New(CTRL_N); }
 
 ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_O)
-{ return v8::Int32::New(CTRL_O); }
+{ return Int32::New(CTRL_O); }
 
 ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_P)
-{ return v8::Int32::New(CTRL_P); }
+{ return Int32::New(CTRL_P); }
 
 ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_Q)
-{ return v8::Int32::New(CTRL_Q); }
+{ return Int32::New(CTRL_Q); }
 
 ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_R)
-{ return v8::Int32::New(CTRL_R); }
+{ return Int32::New(CTRL_R); }
 
 ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_S)
-{ return v8::Int32::New(CTRL_S); }
+{ return Int32::New(CTRL_S); }
 
 ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_T)
-{ return v8::Int32::New(CTRL_T); }
+{ return Int32::New(CTRL_T); }
 
 ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_U)
-{ return v8::Int32::New(CTRL_U); }
+{ return Int32::New(CTRL_U); }
 
 ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_V)
-{ return v8::Int32::New(CTRL_V); }
+{ return Int32::New(CTRL_V); }
 
 ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_W)
-{ return v8::Int32::New(CTRL_W); }
+{ return Int32::New(CTRL_W); }
 
 ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_X)
-{ return v8::Int32::New(CTRL_X); }
+{ return Int32::New(CTRL_X); }
 
 ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_Y)
-{ return v8::Int32::New(CTRL_Y); }
+{ return Int32::New(CTRL_Y); }
 
 ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_Z)
-{ return v8::Int32::New(CTRL_Z); }
+{ return Int32::New(CTRL_Z); }
 
 ACCESSOR_GETTER_DEFINE(Scripting_engine, I)
-{ return v8::Int32::New(105); }
+{ return Int32::New(105); }
 
 ACCESSOR_GETTER_DEFINE(Scripting_engine, ESC)
-{ return v8::Int32::New(27); }
-
-v8::Handle<v8::Object> Scripting_engine::wrap_class_as_object(
-        v8::Handle<v8::FunctionTemplate>* function_tmpl,
-        Scripting_engine* instance,
-        Object_template_extension extensions)
-{
-    v8::HandleScope scope;
-    if (function_tmpl->IsEmpty())
-        (*function_tmpl) = v8::FunctionTemplate::New();
-    generate_fun_tmpl(function_tmpl, accessors, functions, NULL);
-    (*function_tmpl)->SetClassName(v8::String::New("rotide"));
-    v8::Handle<v8::Function> ctor = (*function_tmpl)->GetFunction();
-    v8::Local<v8::Object> obj = ctor->NewInstance();
-    obj->SetInternalField(0, v8::External::New(instance));
-    return scope.Close(obj);
-}
+{ return Int32::New(27); }

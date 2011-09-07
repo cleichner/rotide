@@ -59,6 +59,8 @@ enum Curses_extended_keys
     CTRL_X,
     CTRL_Y,
     CTRL_Z,
+    SUB,
+    ESC
 };
 
 inline

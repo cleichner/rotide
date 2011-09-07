@@ -29,7 +29,7 @@ int main(int argc, char** argv)
     if (engine.good)
         curses.clear();
 
-    char c = '\0';
+    char c;
     bool insert_mode;
 
     curses.status() << engine.status(); 
