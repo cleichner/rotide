@@ -37,8 +37,10 @@ using namespace v8;
 //      CTRL_A .. CTRL_Z    : integers
 //      A .. Z              : integers
 //
-//      test    : function ()
-//      bind    : function ([Key], function)
+//      test        : function ()
+//      bind        : function ([Key], String, function)
+//      on_command  : function (function ([Key]))
+//      on_command  : function (String, function ([Key]))
 //
 namespace {
 
@@ -79,6 +81,7 @@ Accessors accessors[] = {
 Function_mapping functions[] = {
     FUNCTION_MAP(Scripting_engine, test),
     FUNCTION_MAP(Scripting_engine, bind),
+    FUNCTION_MAP(Scripting_engine, on_command),
     { NULL, NULL, NULL }
 };
 
@@ -132,7 +135,7 @@ Scripting_engine::Scripting_engine(Curses* curses)
 
     // Create the execution scope
     HandleScope exec_scope;
-    Handle<String> script = 
+    Local<String> script = 
         String::New(buf.c_str(), buf.size());
 
     // Create the global template and reserve internal fields
@@ -149,8 +152,8 @@ Scripting_engine::Scripting_engine(Curses* curses)
 
     // Set the internal field to a reference of this
     // Allow the object to reference itself.
-    Handle<Object> proxy = context->Global();
-    Handle<Object> proto = proxy->GetPrototype().As<Object>();
+    Local<Object> proxy = context->Global();
+    Local<Object> proto = proxy->GetPrototype().As<Object>();
     proto->SetPointerInInternalField(0, this);
     proto->Set(String::New("ro"), object);
 
@@ -163,9 +166,9 @@ Scripting_engine::Scripting_engine(Curses* curses)
 
     // Compile the code
     TryCatch tc;
-    Handle<Script> compiled = Script::Compile(script);
+    Local<Script> compiled = Script::Compile(script);
     if (tc.HasCaught()) {
-        Handle<Message> message = tc.Message();
+        Local<Message> message = tc.Message();
         pos  << "[FAIL]" << NEXT_LINE
             << "<" << RC_FILE << ":" << message->GetLineNumber() << "> "
             << *String::Utf8Value(message->Get());
@@ -175,9 +178,9 @@ Scripting_engine::Scripting_engine(Curses* curses)
     pos << "[GOOD]" << NEXT_LINE << "Running";
 
     // Run the script
-    Handle<Value> result = compiled->Run();
+    Local<Value> result = compiled->Run();
     if (tc.HasCaught()) {
-        Handle<Message> message = tc.Message();
+        Local<Message> message = tc.Message();
         pos << "[FAIL]" << NEXT_LINE
             << "<" << RC_FILE << ":" << message->GetLineNumber() << "> "
             << *String::Utf8Value(message->Get());
@@ -217,7 +220,7 @@ int is_key_pressed(int fd, int key)
 // Any key press is handled independently and is greedy.
 //
 // EXAMPLE:
-//  ro.bind([ro.A, ro.B, ro.C], function () { ro.status = "ABCs!"; })
+//  ro.bind([ro.A, ro.B, ro.C], "ABC", function () { ro.status = "ABCs!"; })
 //  /*  This binding below is greedy and consequently will cause the above
 //      binding to never be called.  */
 //  ro.bind([ro.A], function () { ro.status = "Hello!"; });
@@ -278,6 +281,7 @@ void Scripting_engine::handle_key_combination()
                         status << "-";
                 }
                 status << " is not an editor command." << RESET;
+                key_history.push_back(key_combination);
                 key_combination.clear();
                 return;
             }
@@ -293,6 +297,7 @@ void Scripting_engine::handle_key_combination()
                 << "ERROR: " 
                 << KEY_STR(key) << " is not an editor command." 
                 << RESET;
+            key_history.push_back(key_combination);
             key_combination.clear();
             return;
         }
@@ -311,16 +316,18 @@ void Scripting_engine::handle_key_combination()
         {
             // TODO(justinvh):  A buffer object or some sort of exposed
             //                  buffer should be available as an argument.
+            assert((*cit).IsEmpty() == false && "Lost handle to function!");
             (*cit)->Call(object, 0, NULL);
             if (tc.HasCaught()) {
                 Curses_pos pos = curses->at(0, 0);
-                Handle<Message> message = tc.Message();
+                Local<Message> message = tc.Message();
                 pos << "[FAIL]" << message->GetLineNumber() << "> "
                     << *String::Utf8Value(message->Get());
                 return;
             }
         }
 
+        key_history.push_back(key_combination);
         key_combination.clear();
     }
 
@@ -374,7 +381,7 @@ bool Scripting_engine::load(const std::string& file)
 
     // Create the execution scope
     HandleScope exec_scope;
-    Handle<String> script = 
+    Local<String> script = 
         String::New(buf.c_str(), buf.size());
 
     // Create the global template and reserve internal fields
@@ -386,9 +393,9 @@ bool Scripting_engine::load(const std::string& file)
 
     // Compile the code
     TryCatch tc;
-    Handle<Script> compiled = Script::Compile(script);
+    Local<Script> compiled = Script::Compile(script);
     if (tc.HasCaught()) {
-        Handle<Message> message = tc.Message();
+        Local<Message> message = tc.Message();
         pos  << "[FAIL]" << NEXT_LINE
             << "<" << str_file.str() << ":" << message->GetLineNumber() << "> "
             << *String::Utf8Value(message->Get());
@@ -399,9 +406,9 @@ bool Scripting_engine::load(const std::string& file)
     pos.col = STATUS;
 
     // Run the script
-    Handle<Value> result = compiled->Run();
+    Local<Value> result = compiled->Run();
     if (tc.HasCaught()) {
-        Handle<Message> message = tc.Message();
+        Local<Message> message = tc.Message();
         pos << "[FAIL]" << NEXT_LINE
             << "<" << str_file << ":" << message->GetLineNumber() << "> "
             << *String::Utf8Value(message->Get());
@@ -423,7 +430,7 @@ Handle<Object> Scripting_engine::wrap_class_as_object(
         (*function_tmpl) = FunctionTemplate::New();
     generate_fun_tmpl(function_tmpl, accessors, functions, NULL);
     (*function_tmpl)->SetClassName(String::New("rotide"));
-    Handle<Function> ctor = (*function_tmpl)->GetFunction();
+    Local<Function> ctor = (*function_tmpl)->GetFunction();
     Local<Object> obj = ctor->NewInstance();
     obj->SetInternalField(0, External::New(instance));
     return scope.Close(obj);
@@ -434,9 +441,9 @@ Handle<Object> Scripting_engine::wrap_class_as_object(
 FUNCTION_DEFINE(Scripting_engine, test)
 {
     Scripting_engine* self = unwrap<Scripting_engine>(args.Holder());
-    Handle<Value> arg_x = args[0];
-    Handle<Value> arg_y = args[1];
-    Handle<Value> arg_str = args[2];
+    Local<Value> arg_x = args[0];
+    Local<Value> arg_y = args[1];
+    Local<Value> arg_str = args[2];
 
     int x = arg_x->Int32Value();
     int y = arg_y->Int32Value();
@@ -446,34 +453,74 @@ FUNCTION_DEFINE(Scripting_engine, test)
     return Undefined();
 }
 
-// JavaScript method: ro.bind([Int32], Function)
+// JavaScript method: ro.bind([Int32], String, Function)
 // Binds a key combination list to a function callback.
 //
 // EXAMPLE:
-//  ro.bind([ro.A, ro.B, ro.C], function () { ro.status = "ABCs!"; })
+//  ro.bind([ro.A, ro.B, ro.C], "doABC", function () { ro.status = "ABCs!"; })
 FUNCTION_DEFINE(Scripting_engine, bind)
 {
     // Unwrap object
     Scripting_engine* self = unwrap<Scripting_engine>(args.Holder());
+    std::string cmd;
     Key_list keys;
 
     // Get keys and function
-    Handle<Value> key_repr(args[0]);
-    Handle<Value> function_repr(args[1]);
+    Local<Value> key_repr(args[0]);
+    Local<Value> cmd_repr(args[1]);
+    Local<Value> function_repr(args[2]);
 
     // Convert the keys to a vector and insert into the local bindings
-    if (smart_convert(key_repr, &keys) && function_repr->IsFunction()) {
-        Handle<Function> function 
-            = Handle<Function>::Cast(function_repr);
-        self->bindings.insert(keys, function);
+    if (smart_convert(key_repr, &keys) 
+            && smart_convert(cmd_repr, &cmd)
+            && function_repr->IsFunction()) {
+        Local<Function> function 
+            = Local<Function>::Cast(function_repr);
+        self->bindings.insert(keys, cmd, function);
         return Undefined();
     } else {
         return Exception::TypeError(
                 String::New(
                     "The definition of this method is: \
+                    ro.bind([Keys], String, Function). You provided the \
+                    wrong types for the arguments to this method."));
+    }
+}
+
+// JavaScript function: ro.on_command (String, function (Args...))
+// JavaScript function: ro.on_command (function (Command, Args...))
+// Defines a callback for when a command is entered. A command is any
+// successful CTRL+ modifier or explicit command.
+FUNCTION_DEFINE(Scripting_engine, on_command)
+{
+    // Unwrap object
+    Scripting_engine* self = unwrap<Scripting_engine>(args.Holder());
+
+    // If the first argument is a function then we are doing the
+    // generic case; it becomes the callback for any completed
+    // command.
+    if (args[0]->IsFunction()) {
+        Local<Function> fun_val = Local<Function>::Cast(args[0]);
+        Persistent<Function> function = Persistent<Function>::New(fun_val);
+        self->attrs.on_command["*"].push_back(function);
+        return Undefined();
+    } else if (args[0]->IsString() && args[1]->IsFunction()) {
+        Local<Value> cmd_repr = args[0];
+        std::string cmd;
+        Local<Function> fun_val = Local<Function>::Cast(args[1]);
+        Persistent<Function> function = Persistent<Function>::New(fun_val);
+        if (smart_convert(cmd_repr, &cmd)) {
+            self->attrs.on_command[cmd].push_back(function);
+            return Undefined();
+        }
+    }
+        
+    return Exception::TypeError(
+                String::New(
+                    "The definition of this method is: \
                     ro.bind([Keys], Function). You provided the wrong types \
                     for the arguments to this method."));
-    }
+
 }
 
 // JavaScript getter: ro.insert_mode : boolean
@@ -481,8 +528,9 @@ FUNCTION_DEFINE(Scripting_engine, bind)
 // Returns the value of insert_mode
 ACCESSOR_GETTER_DEFINE(Scripting_engine, insert_mode)
 {
+    HandleScope scope;
     Scripting_engine* self = unwrap<Scripting_engine>(info.Holder());
-    Handle<Value> insert_mode_repr;
+    Local<Value> insert_mode_repr;
     if (smart_convert(self->attrs.insert_mode, &insert_mode_repr)) {
         return insert_mode_repr;
     } else {
@@ -513,8 +561,9 @@ ACCESSOR_SETTER_DEFINE(Scripting_engine, insert_mode)
 // messages that can be history-ized for viewing is more appropriate.
 ACCESSOR_GETTER_DEFINE(Scripting_engine, status)
 {
+    HandleScope scope;
     Scripting_engine* self = unwrap<Scripting_engine>(info.Holder());
-    Handle<Value> status_repr;
+    Local<Value> status_repr;
     if (smart_convert(self->attrs.status, &status_repr)) {
         return status_repr;
     } else {

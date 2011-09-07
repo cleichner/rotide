@@ -27,17 +27,21 @@ class Curses;
 class Curses_pos;
 class Key_node;
 
+typedef std::map<int, Key_node> Key_mapping;
+typedef std::vector<v8::Persistent<v8::Function> > Function_list;
+typedef std::map<std::string, Function_list> Function_map;
+typedef std::map<std::string, v8::Persistent<v8::Function> > Command_mapping; 
+typedef std::vector<int> Key_list;
+typedef std::vector<Key_list> Key_history;
+
 class Scripting_attributes {
 public:
     Scripting_attributes()
         : insert_mode(false), status("-- WAITING --") { }
     bool insert_mode;
     std::string status;
+    Function_map on_command;
 };
-
-typedef std::map<int, Key_node> Key_mapping;
-typedef std::vector<v8::Persistent<v8::Function> > Function_list;
-typedef std::vector<int> Key_list;
 
 struct Key_node{
     Key_node() { }
@@ -47,7 +51,9 @@ struct Key_node{
 
 class Key_engine {
 public:
-    void insert(const Key_list& key_list, const v8::Handle<v8::Function>& fun)
+    void insert(const Key_list& key_list, 
+            const std::string& cmd,
+            const v8::Handle<v8::Function>& fun)
     {
         Key_mapping* mapping = &keys;
         Key_mapping::iterator kit = keys.begin();
@@ -71,7 +77,20 @@ public:
             }
         }
 
-        node->functions.push_back(v8::Persistent<v8::Function>::New(fun));
+        v8::Persistent<v8::Function> persistent_fun = v8::Persistent<v8::Function>::New(fun);
+        cmds[cmd] = persistent_fun;
+        node->functions.push_back(persistent_fun);
+    }
+
+    bool get(const std::string& cmd, v8::Handle<v8::Function>* fun)
+    {
+        Command_mapping::iterator cmit = cmds.find(cmd);
+        if (cmit != cmds.end()) {
+            fun = &cmit->second;
+            return true;
+        }
+
+        return false;
     }
 
     bool get(const int key, const Function_list** funs)
@@ -109,6 +128,7 @@ public:
         return false;
     }
 
+    Command_mapping cmds;
     Key_mapping keys;
 };
 
@@ -132,11 +152,13 @@ private:
     void handle_key_combination();
     Scripting_attributes attrs;
     Key_list key_combination;
+    Key_history key_history;
 public:
     DEFINE(Scripting_engine)
     {
         FUNCTION(test);
         FUNCTION(bind);
+        FUNCTION(on_command);
         ACCESSOR(insert_mode);
         ACCESSOR(status);
 

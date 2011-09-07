@@ -1,8 +1,10 @@
+ro.cmd_history = [];
+
 /*
  * Creates a binding for inserting characters.
  * DEFAULT: i
  */
-ro.bind([ro.I], function(buffer) {
+ro.bind([ro.I], "insert", function(buffer) {
         if (!ro.insert_mode) ro.insert_mode = true;
         ro.status = "-- INSERT --"
 });
@@ -11,7 +13,7 @@ ro.bind([ro.I], function(buffer) {
  * Creates a binding for leaving insert mode.
  * DEFAULT: esc
  */
-ro.bind([ro.ESC], function () {
+ro.bind([ro.ESC], "command", function () {
     ro.status = "-- WAITING --";
 
     if (ro.insert_mode) {
@@ -26,10 +28,6 @@ ro.bind([ro.ESC], function () {
     return false
 })
 
-/*
- * Tests key combinations.
- */
-ro.bind([ro.CTRL_A, ro.CTRL_B], function () {
-    ro.status = "-- You know your ABDs --";
-    ro.test(20, 20, "Next time, try something different.");
+ro.on_command(function (cmd) {
+    ro.cmd_history.append(cmd);
 });
