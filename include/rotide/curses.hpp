@@ -13,8 +13,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
-// Abide by the style guide: http://goo.gl/WkJ9C
 
 #ifndef ROTIDE_CURSES_HPP
 #define ROTIDE_CURSES_HPP
@@ -66,8 +64,8 @@ public:
     void line();
     void resize();
     void clear();
-    void draw_status_bar();
     bool get(char* c);
+    void draw_status_bar();
     Curses_pos& at(const int row, const int col);
     Curses_pos& status();
     int last_key;
