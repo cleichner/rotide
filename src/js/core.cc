@@ -18,6 +18,8 @@
 #include <rotide/js/core.hpp>
 #include <rotide/curses.hpp>
 
+using namespace v8;
+
 // Define the accessors and functions to the JavaScript core.
 //
 // ro.core =

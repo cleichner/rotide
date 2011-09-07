@@ -23,6 +23,8 @@
 #include <string>
 #include <vector>
 
+#include <cassert>
+
 // Put curses into its own namespace so it doesn't pollute the project
 namespace curses_lib {
 #include <ncurses.h>
@@ -43,6 +45,7 @@ public:
     int col, row;
     curses_lib::WINDOW* active;
 
+    Curses_pos() { }
     Curses_pos(int row, int col, curses_lib::WINDOW* window)
         : row(row), col(col), active(window) { }
 
@@ -51,6 +54,7 @@ public:
     template <class T>
     Curses_pos& operator<<(const T& t)
     {
+        assert(active != NULL && "Curses_pos not tied to a window!");
         std::stringstream ss;
         ss << t;
         print(ss.str());
