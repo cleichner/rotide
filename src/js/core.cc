@@ -46,7 +46,7 @@ Handle<Object> Core::wrap_class_as_object(Scripting_engine* eng)
     generate_fun_tmpl(&core_tmpl, accessors, functions, NULL);
     core_tmpl->SetClassName(String::New("core"));
     Handle<Object> core = core_tmpl->GetFunction()->NewInstance();
-    core->SetPointerInInternalField(0, eng);
+    core->SetInternalField(0, External::New(eng));
     return scope.Close(core);
 }
 
