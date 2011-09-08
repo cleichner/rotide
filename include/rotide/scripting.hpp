@@ -19,20 +19,24 @@
 
 #include <v8.h>
 #include <rotide/v8/easy.hpp>
+#include <sstream>
 #include <string>
 #include <vector>
 #include <map>
+
+bool is_ctrl_key(const int key);
 
 class Curses;
 class Curses_pos;
 class Key_node;
 
 typedef std::map<int, Key_node> Key_mapping;
-typedef std::vector<v8::Persistent<v8::Function> > Function_list;
+//typedef std::vector<v8::Handle<v8::Function> > Function_list;
 typedef std::map<std::string, Function_list> Function_map;
 typedef std::map<std::string, v8::Persistent<v8::Function> > Command_mapping; 
 typedef std::vector<int> Key_list;
 typedef std::vector<Key_list> Key_history;
+typedef std::vector<std::string> Argument_list;
 
 class Scripting_attributes {
 public:
@@ -103,20 +107,91 @@ public:
         return false;
     }
 
-    bool get(const Key_list& key_list, const Function_list** funs)
+    bool get(const Key_list& key_list, 
+            const Function_list** funs, 
+            v8::Handle<v8::Array>* arguments)
     {
         Key_mapping* mapping = &keys;
-        Key_mapping::iterator kit;
+        Key_mapping::iterator kit = keys.end();
+
+        bool is_cmd = is_ctrl_key(*key_list.begin());
         for (Key_list::const_iterator cit = key_list.begin(),
                 end = key_list.end();
                 cit != end;
                 ++cit)
         {
+            if (kit != mapping->end() 
+                    && is_cmd 
+                    && (*cit) == int(' ') 
+                    && (cit + 1) != end) 
+            {
+                ++cit;
+
+                bool in_quote = false;
+                char c = *cit, p = '\0';
+                std::stringstream buf;
+                Argument_list arg_list;
+                for (Key_list::const_iterator ait = cit;
+                        ait != end;
+                        ++ait)
+                {
+                    c = *ait;
+                    bool end_next = (ait + 1) == end;
+                    bool is_quote = (c == '"' && p != '\\');
+
+                    // Switch our quote states
+                    if (is_quote) 
+                        in_quote = !in_quote;
+
+                    // If the last character is next then make sure to
+                    // include it (unless it is a quote)
+                    if (end_next && !is_quote)
+                        buf << c;
+
+                    // If we're not in a quote and we're in a separator
+                    // or we're near the end then we can append the
+                    // string to the stream.
+                    if ((!in_quote && c == ' ') || end_next) {
+                        p = c;
+                        arg_list.push_back(buf.str());
+                        buf.str("");
+                        continue;
+                    }
+
+                    p = c;
+
+                    if (is_quote || p == '\\')
+                        continue;
+
+                    buf << c;
+                }
+
+                *arguments = v8::Array::New(arg_list.size());
+
+                int i = 0;
+                for (Argument_list::const_iterator argit = arg_list.begin(),
+                        argend = arg_list.end();
+                        argit != argend;
+                        ++argit, i++)
+                {
+                    // TODO(justinvh): type-based arguments?
+                    const char* s = (*argit).c_str();
+                    (*arguments)->Set(i, v8::String::New(s, (*argit).size()));
+                }
+
+                *funs = &kit->second.functions;
+                return true;
+            }
+
             kit = mapping->find(*cit);
             if (kit != mapping->end()) {
                 if ((cit + 1) == key_list.end()) {
-                    *funs = &kit->second.functions;
-                    return true;
+                    if (kit->second.functions.size()) {
+                        *funs = &kit->second.functions;
+                        return true;
+                    } else {
+                        return false;
+                    }
                 } else {
                     mapping = &kit->second.children;
                 }
@@ -139,7 +214,7 @@ public:
     void think();
     
     v8::Handle<v8::ObjectTemplate> global;      // Global scope
-    v8::Handle<v8::Object> object;               // Engine namespace
+    v8::Persistent<v8::Object> object;          // Engine namespace
     v8::Persistent<v8::FunctionTemplate> tmpl;  // Function template
     v8::Persistent<v8::Context> context;        // Engine context
     Curses* curses;

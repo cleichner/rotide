@@ -149,7 +149,7 @@ Scripting_engine::Scripting_engine(Curses* curses)
 
     // Create the engine object
     tmpl = Persistent<FunctionTemplate>();
-    object = wrap_class_as_object(&tmpl, this, NULL);
+    object = Persistent<Object>::New(wrap_class_as_object(&tmpl, this, NULL));
 
     // Set the internal field to a reference of this
     // Allow the object to reference itself.
@@ -204,6 +204,11 @@ int is_key_pressed(int fd, int key)
 }
 */
 
+bool is_ctrl_key(const int key)
+{
+    return (key >= CTRL_A && key <= CTRL_Z);
+}
+
 // A key combination is any series of keys pressed that are defined to
 // have a callback to a JavaScript function.
 //
@@ -231,11 +236,14 @@ void Scripting_engine::handle_key_combination()
     Key_list::const_iterator kcit, end;
     Curses_pos status = curses->status();
     int key = curses->last_key;
+    HandleScope handle;
+    Context::Scope scope(context);
+    Handle<Array> arguments;
 
     // If the key pressed is any variation of CTRL+A to CTRL+Z
     // excluding CTRL+J (since ENTER holds the same values traditionally)
     // then append the key to the vector and update the status.
-    if (key >= CTRL_A && key <= CTRL_Z && key != CTRL_J) {
+    if (is_ctrl_key(key) && key != CTRL_J) {
         key_combination.push_back(key);
         status << CLEAR;
         for (kcit = key_combination.begin(), end = key_combination.end();
@@ -268,24 +276,51 @@ void Scripting_engine::handle_key_combination()
         if (key == CTRL_J) {
             // If the current key combination does not produce a binding
             // then we need to alert the user.
-            if (!bindings.get(key_combination, &list)) {
+            if (!bindings.get(key_combination, &list, &arguments)) {
                 if (insert_mode()) return;
 
-                status << "ERROR: ";
+                status << "ERROR: \"";
                 for (kcit = key_combination.begin(),
                         end = key_combination.end();
                         kcit != end;
                         ++kcit)
                 {
-                    status << KEY_STR(*kcit);
-                    if ((kcit + 1) != end) 
+                    status << KEY_STR(*kcit, KS_NO_PRETTY_PRINT);
+                    if (is_ctrl_key(*kcit) 
+                            && (kcit + 1) != end
+                            && is_ctrl_key(*(kcit + 1))) {
                         status << "-";
+                    }
                 }
-                status << " is not an editor command." << RESET;
+                status << "\" is not an editor command." << RESET;
                 key_history.push_back(key_combination);
                 key_combination.clear();
                 return;
             }
+        } else if (!insert_mode()
+                && key_combination.size()
+                && is_ctrl_key(*key_combination.begin())) {
+            if (key_combination.begin() != key_combination.end()
+                    && is_ctrl_key(*(key_combination.end() - 1)) 
+                    && !is_ctrl_key(key)) {
+                key_combination.push_back((int)' ');
+            }
+
+            key_combination.push_back(key);
+            status << RESET;
+            for (kcit = key_combination.begin(),
+                    end = key_combination.end();
+                    kcit != end;
+                    ++kcit)
+            {
+                status << KEY_STR(*kcit, KS_NO_PRETTY_PRINT);
+                if (is_ctrl_key(*kcit) 
+                            && (kcit + 1) != end
+                            && is_ctrl_key(*(kcit + 1))) {
+                        status << "-";
+                }
+            }
+            return;
         }
         // Now we are just typing a single key. So, parse the command
         // as single key press.
@@ -295,8 +330,8 @@ void Scripting_engine::handle_key_combination()
             if (insert_mode()) return;
 
             status 
-                << "ERROR: " 
-                << KEY_STR(key) << " is not an editor command." 
+                << "ERROR: \"" 
+                << KEY_STR(key) << "\" is not an editor command." 
                 << RESET;
             key_history.push_back(key_combination);
             key_combination.clear();
@@ -307,9 +342,8 @@ void Scripting_engine::handle_key_combination()
 
         // Now a valid function list has been generated. Create the
         // execution context and call the JavaScript function.
-        HandleScope handle;
-        Context::Scope scope(context);
         TryCatch tc;
+        Handle<Value> values[1] = { arguments };
         for (Function_list::const_iterator cit = list->begin(),
                 end = list->end();
                 cit != end;
@@ -317,8 +351,14 @@ void Scripting_engine::handle_key_combination()
         {
             // TODO(justinvh):  A buffer object or some sort of exposed
             //                  buffer should be available as an argument.
+            
             assert((*cit).IsEmpty() == false && "Lost handle to function!");
-            (*cit)->Call(object, 0, NULL);
+            if (arguments.IsEmpty()) {
+                (*cit)->Call(object, 0, NULL);
+            } else {
+                (*cit)->Call(object, 1, values);
+            }
+
             if (tc.HasCaught()) {
                 Curses_pos pos = curses->at(0, 0);
                 Local<Message> message = tc.Message();

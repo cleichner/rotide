@@ -203,7 +203,7 @@ struct Function_mapping
 
 typedef std::pair<Accessors*, Function_mapping*> Mapping_pair;
 typedef std::vector<Mapping_pair> Extension_list;
-typedef std::vector<v8::Persistent<v8::Function> > Function_list;
+typedef std::vector<v8::Handle<v8::Function> > Function_list;
 
 /*
 Accessors provide a method getting and setting variables associated with

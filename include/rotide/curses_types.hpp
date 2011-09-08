@@ -63,14 +63,22 @@ enum Curses_extended_keys
     ESC
 };
 
+enum Key_string_mode {
+    KS_PRETTY_PRINT,
+    KS_NO_PRETTY_PRINT,
+};
+
 inline
-std::string KEY_STR(const int key)
+std::string KEY_STR(const int key, const Key_string_mode& mode = KS_PRETTY_PRINT)
 {
     std::stringstream buf;
     if (key >= CTRL_A && key <= CTRL_Z) {
         buf << "<CTRL+" << (char)(key + 96) << ">";
     } else {
-        buf << "<" << (char)key << ">";
+        if (KS_PRETTY_PRINT)
+            buf << "<" << (char)key << ">";
+        else
+            buf << (char)key;
     }
 
     std::string s = buf.str();

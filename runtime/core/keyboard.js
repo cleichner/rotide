@@ -9,6 +9,11 @@ ro.bind([ro.I], "insert", function(buffer) {
         ro.status = "-- INSERT --"
 });
 
+ro.bind([ro.CTRL_A, ro.CTRL_S], "test", function (args) {
+    for (i = 0; i < args.length; i++)
+        ro.test(10 + i, 5, "Whoa, you said " + args[i] + " which is crazy.");
+});
+
 /*
  * Creates a binding for leaving insert mode.
  * DEFAULT: esc
