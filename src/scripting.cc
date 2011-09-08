@@ -99,6 +99,7 @@ Scripting_engine::Scripting_engine(Curses* curses)
     assert(curses != NULL && "Null instance of curses passed!");
 
     good = false;
+    Curses_color COLOR_FAIL = COLOR(RED, BLACK);
 
     // Read in the source
     Curses_pos pos = curses->at(0, 0);
@@ -117,7 +118,7 @@ Scripting_engine::Scripting_engine(Curses* curses)
     // Alert the user if the read goes wrong.
     pos.col = STATUS;
     if (!rc.good()) {
-        pos  << "[FAIL]" << NEXT_LINE
+        pos << COLOR_FAIL << "[FAIL]" << RESET << NEXT_LINE
             << RC_FILE << " could not be found!" 
             << NEXT_LINE;
         return;
@@ -169,7 +170,7 @@ Scripting_engine::Scripting_engine(Curses* curses)
     Local<Script> compiled = Script::Compile(script);
     if (tc.HasCaught()) {
         Local<Message> message = tc.Message();
-        pos  << "[FAIL]" << NEXT_LINE
+        pos << COLOR_FAIL << "[FAIL]" << RESET << NEXT_LINE
             << "<" << RC_FILE << ":" << message->GetLineNumber() << "> "
             << *String::Utf8Value(message->Get());
         return;
@@ -181,7 +182,7 @@ Scripting_engine::Scripting_engine(Curses* curses)
     Local<Value> result = compiled->Run();
     if (tc.HasCaught()) {
         Local<Message> message = tc.Message();
-        pos << "[FAIL]" << NEXT_LINE
+        pos << COLOR_FAIL << "[FAIL]" << RESET << NEXT_LINE
             << "<" << RC_FILE << ":" << message->GetLineNumber() << "> "
             << *String::Utf8Value(message->Get());
         return;

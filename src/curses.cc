@@ -137,6 +137,7 @@ void Curses::shutdown()
 // Refresh the active window. Make the curses go to the appropriate position.
 void Curses::refresh()
 {
+    ::refresh();
     wrefresh(active);
     wmove(active, pos.row, pos.col);
 }

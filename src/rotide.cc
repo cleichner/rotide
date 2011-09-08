@@ -21,21 +21,27 @@
 
 int main(int argc, char** argv)
 {
+    char c;
+    bool insert_mode;
+
     setlocale(LC_ALL, "");
 
     Curses curses;
     Scripting_engine engine(&curses);
 
-    if (engine.good)
-        curses.clear();
 
-    char c;
-    bool insert_mode;
+    if (!engine.good)  {
+        curses.refresh();
+        curses.wait();
+        return -1;
+    }
 
+    curses.clear();
     curses.status() << engine.status(); 
     curses.draw_status_bar();
-    Curses_pos at = curses.at(0, 0);
     curses.refresh();
+
+    Curses_pos at = curses.at(0, 0);
 
     while (curses.get(&c)) {
         insert_mode = engine.insert_mode();
