@@ -77,6 +77,7 @@ Curses::Curses()
     // Create a screen buffer
     getmaxyx(stdscr, row, col);
     active = newwin(row, col, 0, 0);
+    touchwin(active);
     box(active, ACS_VLINE, ACS_HLINE);
     buffers.push_back(active);
 
@@ -96,8 +97,8 @@ void Curses::draw_status_bar()
 {
     int row, col;
     getmaxyx(active, row, col);
-    move(row - 2, 0);
-    hline(ACS_HLINE, col);
+    wmove(active, row - 2, 0);
+    whline(active, ACS_HLINE, col);
 }
 
 // A clear will clear all windows, not just the active buffer.
@@ -137,7 +138,6 @@ void Curses::shutdown()
 // Refresh the active window. Make the curses go to the appropriate position.
 void Curses::refresh()
 {
-    ::refresh();
     wrefresh(active);
     wmove(active, pos.row, pos.col);
 }
@@ -152,7 +152,7 @@ void Curses::line()
 // Wait will wait until the next character is pressed.
 void Curses::wait()
 {
-    getch();
+    wgetch(active);
 }
 
 // Gets the next pressed character and returns true or false depending
@@ -160,7 +160,7 @@ void Curses::wait()
 // TODO(justinvh): The CTRL_C break is a temporary thing.
 bool Curses::get(char* s)
 {
-    *s = getch();
+    *s = wgetch(active);
     last_key = (int)*s;
     if (*s == CTRL_C)
         return false;
@@ -176,6 +176,7 @@ bool Curses::get(char* s)
 //
 Curses_pos& Curses::at(const int x, const int y)
 {
+    assert(active != NULL && "Active window is null.");
     pos.col = y;
     pos.row = x;
     pos.active = active;

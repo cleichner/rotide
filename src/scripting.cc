@@ -102,7 +102,7 @@ Scripting_engine::Scripting_engine(Curses* curses)
     Curses_color COLOR_FAIL = COLOR(RED, BLACK);
 
     // Read in the source
-    Curses_pos pos = curses->at(0, 0);
+    Curses_pos& pos = curses->at(0, 0);
     active_pos = &pos;
 
     const char* RC_FILE = "runtime/rotide.js";

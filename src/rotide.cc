@@ -27,6 +27,8 @@ int main(int argc, char** argv)
     setlocale(LC_ALL, "");
 
     Curses curses;
+    curses.refresh();
+
     Scripting_engine engine(&curses);
 
 
@@ -37,8 +39,8 @@ int main(int argc, char** argv)
     }
 
     curses.clear();
-    curses.status() << engine.status(); 
     curses.draw_status_bar();
+    curses.status() << engine.status(); 
     curses.refresh();
 
     Curses_pos at = curses.at(0, 0);
