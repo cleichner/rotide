@@ -7,11 +7,9 @@ ro.cmd_history = [];
 ro.bind([ro.I], "insert", function(buffer) {
         if (!ro.insert_mode) ro.insert_mode = true;
         ro.status = "-- INSERT --"
-});
-
-ro.bind([ro.CTRL_A, ro.CTRL_S], "test", function (cmd, args) {
-    for (i = 0; i < args.length; i++)
-        ro.test(10 + i, 5, "Whoa, you said " + args[i] + " which is crazy.");
+        // Refocus cursor
+        ro.mx = ro.mx;
+        ro.my = ro.my;
 });
 
 ro.bind([ro.COLON], "command_text", function () {
@@ -19,6 +17,33 @@ ro.bind([ro.COLON], "command_text", function () {
     ro.status = "#";
     ro.cmd_mode = true;
 });
+
+ro.bind([106], "down", function (argument) {
+    if (ro.insert_mode) return false;
+    ro.my += 1;
+    return true;
+});
+
+ro.bind([107], "up", function (argument) {
+    if (ro.insert_mode) return false;
+    ro.my -= 1;
+    return true;
+});
+
+ro.bind([108], "right", function (argument) {
+    if (ro.insert_mode) return false;
+    ro.mx += 1;
+    return true;
+});
+
+ro.bind([104], "left", function (argument) {
+    if (ro.insert_mode) return false;
+    ro.mx -= 1;
+    return true;
+});
+
+
+
 
 /*
  * Creates a binding for leaving insert mode.

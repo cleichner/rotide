@@ -76,10 +76,13 @@ Curses::Curses()
 
     // Create a screen buffer
     getmaxyx(stdscr, row, col);
-    active = newwin(row, col, 0, 0);
-    touchwin(active);
-    box(active, ACS_VLINE, ACS_HLINE);
-    buffers.push_back(active);
+    active_window = newwin(row - 2, col, 0, 0);
+    status_window = newwin(2, col, row - 2, 0);
+    touched_window = active_window;
+    touchwin(active_window);
+    touchwin(status_window);
+    buffers.push_back(active_window);
+    buffers.push_back(status_window);
 
     // Add to the instances for signals
     instances.push_back(this);
@@ -90,18 +93,18 @@ Curses::~Curses()
     shutdown();
 }
 
-// The status bar is located at the bottom of the screen
+// The status_window bar is located at the bottom of the screen
 // TODO(justinvh): For now it is a fixed location, but ideally it should
 // be located whatever column specified, preferably in JavaScript.
 void Curses::draw_status_bar()
 {
     int row, col;
-    getmaxyx(active, row, col);
-    wmove(active, row - 2, 0);
-    whline(active, ACS_HLINE, col);
+    getmaxyx(status_window, row, col);
+    wmove(status_window, 0, 0);
+    whline(status_window, ACS_HLINE, col);
 }
 
-// A clear will clear all windows, not just the active buffer.
+// A clear will clear all windows, not just the active_window buffer.
 // If a buffer wants to clear itself, then it should be done in JavaScript
 void Curses::clear()
 {
@@ -135,24 +138,23 @@ void Curses::shutdown()
     endwin();
 }
 
-// Refresh the active window. Make the curses go to the appropriate position.
+// Refresh the active_window window. Make the curses go to the appropriate position.
 void Curses::refresh()
 {
-    wrefresh(active);
-    wmove(active, pos.row, pos.col);
+    wrefresh(touched_window);
 }
 
 // Draws a line in the terminal at the current position.
 // The default character is the ACS_HLINE character which is fine.
 void Curses::line()
 {
-    whline(active, ACS_HLINE, pos.row);
+    whline(active_window, ACS_HLINE, pos.row);
 }
 
 // Wait will wait until the next character is pressed.
 void Curses::wait()
 {
-    wgetch(active);
+    wgetch(active_window);
 }
 
 // Gets the next pressed character and returns true or false depending
@@ -160,7 +162,7 @@ void Curses::wait()
 // TODO(justinvh): The CTRL_C break is a temporary thing.
 bool Curses::get(char* s)
 {
-    *s = wgetch(active);
+    *s = wgetch(active_window);
     last_key = (int)*s;
     if (*s == CTRL_C)
         return false;
@@ -176,27 +178,29 @@ bool Curses::get(char* s)
 //
 Curses_pos& Curses::at(const int x, const int y)
 {
-    assert(active != NULL && "Active window is null.");
+    assert(active_window != NULL && "Active window is null.");
+    pos.instance = this;
     pos.col = y;
     pos.row = x;
-    pos.active = active;
+    pos.active = active_window;
     pos.col = pos.col == 0 ? 1 : pos.col;
     pos.row = pos.row == 0 ? 1 : pos.row;
-    wmove(active, pos.row, pos.col);
+    wmove(active_window, pos.row, pos.col);
     return pos;
 }
 
 
-// Returns a curses position object relative to the status line.
+// Returns a curses position object relative to the status_window line.
 // Useful for just writing things to the user at a whim.
 Curses_pos& Curses::status()
 {
     int row, col;
-    getmaxyx(active, row, col);
-    pos.col = 0;
-    pos.row = row - 1;
-    pos.active = active;
-    return pos;
+    getmaxyx(status_window, row, col);
+    spos.instance = this;
+    spos.col = 0;
+    spos.row = row - 1;
+    spos.active = status_window;
+    return spos;
 }
 
 // Prints a given string to the console at an x, y coordinate.
@@ -204,17 +208,19 @@ Curses_pos& Curses::status()
 // << operators exist.
 void Curses_pos::print(const std::string& s)
 {
+    wmove(active, row, col);
     mvwprintw(active, row, col, "%s", s.c_str());
     col += s.size();
+    if (focus) instance->touched_window = active;
 }
 
 // Handles transforming a position as the character stream moves.
 //
 // EXAMPLE: 
-//  Curses_pos& status = curses.status();
+//  Curses_pos& status_window = curses.status();
 //  Curses_pos& warning = curses.at(5, 5);
 //  warning << BOLD << COLOR(RED, BLACK) 
-//          << "Fire!!" << status << "-- FIRE --";
+//          << "Fire!!" << status_window << "-- FIRE --";
 //
 Curses_pos& Curses_pos::operator<<(const Curses_pos& cp)
 {
@@ -228,8 +234,8 @@ Curses_pos& Curses_pos::operator<<(const Curses_pos& cp)
 // in the Curses_action enumeration.
 //
 // EXAMPLE:
-// Curses_pos& status = curses.status();
-// status << COLOR(RED, BLACK) 
+// Curses_pos& status_window = curses.status();
+// status_window << COLOR(RED, BLACK) 
 //        << "Hello, world" << RESET
 //        << "Regular colors!";
 //
@@ -268,6 +274,13 @@ Curses_pos& Curses_pos::operator<<(const Curses_action& ca)
         wmove(active, row, 0);
         wclrtoeol(active);
     }
+
+    // FOCUS
+    if (action & FOCUS)
+        focus = true;
+
+    if (action & NOFOCUS)
+        focus = false;
 
     return *this;
 }

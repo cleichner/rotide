@@ -48,6 +48,8 @@ Accessors accessors[] = {
     ACCESSOR_MAP(Scripting_engine, insert_mode),
     ACCESSOR_MAP(Scripting_engine, cmd_mode),
     ACCESSOR_MAP(Scripting_engine, status),
+    ACCESSOR_MAP(Scripting_engine, mx),
+    ACCESSOR_MAP(Scripting_engine, my),
     ACCESSOR_GETTER_MAP(Scripting_engine, CTRL_A),
     ACCESSOR_GETTER_MAP(Scripting_engine, CTRL_B),
     ACCESSOR_GETTER_MAP(Scripting_engine, CTRL_C),
@@ -243,10 +245,12 @@ void Scripting_engine::handle_key_combination()
     Curses_pos status = curses->status();
     int key = curses->last_key;
 
+
     // If the key pressed is any variation of CTRL+A to CTRL+Z
     // excluding CTRL+J (since ENTER holds the same values traditionally)
     // then append the key to the vector and update the status.
     if ((attrs.cmd_mode && is_cmd_key(key)) || (is_ctrl_key(key) && key != CTRL_J)) {
+        status << FOCUS;
         status << CLEAR;
 
         if (attrs.cmd_mode) {
@@ -267,6 +271,9 @@ void Scripting_engine::handle_key_combination()
         }
         return;
     } 
+
+    status << NOFOCUS;
+    curses->touched_window = curses->active_window;
 
     // Now were' in the case that we did not press CTRL+A .. CTRL+Z and
     // instead are just typing a single command.
@@ -437,6 +444,7 @@ void Scripting_engine::handle_key_combination()
 void Scripting_engine::think()
 {
     handle_key_combination();
+    curses->refresh();
 }
 
 // Load a runtime/* file.
@@ -722,10 +730,68 @@ ACCESSOR_SETTER_DEFINE(Scripting_engine, status)
     self->curses->status() << self->attrs.status;
 }
 
+// JavaScript getter: ro.mx : Int32
+// Retrieves the cursor x position.
+ACCESSOR_GETTER_DEFINE(Scripting_engine, mx)
+{
+    Scripting_engine* self = unwrap<Scripting_engine>(info.Holder());
+    Handle<Value> mx_repr;
+    if (smart_convert(self->curses->pos.col, &mx_repr)) {
+        return mx_repr;
+    } else {
+        return Exception::Error(
+                String::New(
+                    "Fatal error in converting type of mouse x"));
+    }
+}
+
+// JavaScript getter: ro.mx : Int32
+// Retrieves the cursor x position.
+ACCESSOR_SETTER_DEFINE(Scripting_engine, mx)
+{
+    Scripting_engine* self = unwrap<Scripting_engine>(info.Holder());
+    if (!smart_convert(value, &self->curses->pos.col)) {
+        Exception::Error(
+                String::New(
+                    "mx is a Int32"));
+    }
+    wmove(self->curses->active_window, 
+            self->curses->pos.row, self->curses->pos.col);
+    self->curses->refresh();
+}
+
+// JavaScript getter: ro.my : Int32
+// Retrieves the cursor x position.
+ACCESSOR_GETTER_DEFINE(Scripting_engine, my)
+{
+    Scripting_engine* self = unwrap<Scripting_engine>(info.Holder());
+    Handle<Value> my_repr;
+    if (smart_convert(self->curses->pos.row, &my_repr)) {
+        return my_repr;
+    } else {
+        return Exception::Error(
+                String::New(
+                    "Fatal error in converting type of mouse x"));
+    }
+}
+
+// JavaScript getter: ro.my : Int32
+// Retrieves the cursor x position.
+ACCESSOR_SETTER_DEFINE(Scripting_engine, my)
+{
+    Scripting_engine* self = unwrap<Scripting_engine>(info.Holder());
+    if (!smart_convert(value, &self->curses->pos.row)) {
+        Exception::Error(
+                String::New(
+                    "my is a Int32"));
+    }
+    wmove(self->curses->active_window, 
+            self->curses->pos.row, self->curses->pos.col);
+    self->curses->refresh();
+}
 
 // JavaScript getters: ro.CTRL_<A..Z>: Int32
 // Returns the corresponding value for a CTRL+<A..Z> press.
-
 ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_A) 
 { return Int32::New(CTRL_A); }
 

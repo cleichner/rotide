@@ -23,7 +23,7 @@
 #include <string>
 #include <vector>
 
-#include <cassert>
+class Curses;
 
 // Put curses into its own namespace so it doesn't pollute the project
 namespace curses_lib {
@@ -42,19 +42,20 @@ namespace curses_lib {
 class Curses_pos {
 public:
     Color_list color_ids;
+    bool focus;
     int col, row;
     curses_lib::WINDOW* active;
+    Curses* instance;
 
-    Curses_pos() { }
-    Curses_pos(int row, int col, curses_lib::WINDOW* window)
-        : row(row), col(col), active(window) { }
+    Curses_pos() : focus(true) { }
+    Curses_pos(int row, int col, curses_lib::WINDOW* window, Curses* instance)
+        : row(row), col(col), active(window), instance(instance) { }
 
     // Provides a way of translating basic types to the
     // the screen; uses stringstream for convenience.
     template <class T>
     Curses_pos& operator<<(const T& t)
     {
-        assert(active != NULL && "Curses_pos not tied to a window!");
         std::stringstream ss;
         ss << t;
         print(ss.str());
@@ -114,9 +115,12 @@ public:
 
     // last pressed key
     int last_key;
-private:
-    Curses_pos pos;
-    curses_lib::WINDOW* active;
+
+    Curses_pos pos, spos;
+    curses_lib::WINDOW* touched_window;
+    curses_lib::WINDOW* active_window;
+    curses_lib::WINDOW* status_window;
+
     Buffer_list buffers;
 };
 

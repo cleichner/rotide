@@ -122,7 +122,9 @@ enum Curses_action
     NEXT_LINE = BIT(1),
     RESET = BIT(2),
     HLINE = BIT(3),
-    CLEAR = BIT(4)
+    CLEAR = BIT(4),
+    FOCUS = BIT(5),
+    NOFOCUS = BIT(6)
 };
 
 #endif // ROTIDE_CURSES_TYPES_HPP

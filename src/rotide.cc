@@ -43,7 +43,7 @@ int main(int argc, char** argv)
     curses.status() << engine.status(); 
     curses.refresh();
 
-    Curses_pos at = curses.at(0, 0);
+    Curses_pos& at = curses.at(0, 0);
 
     while (curses.get(&c)) {
         insert_mode = engine.insert_mode();

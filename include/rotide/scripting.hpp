@@ -282,6 +282,8 @@ public:
         ACCESSOR(insert_mode);
         ACCESSOR(cmd_mode);
         ACCESSOR(status);
+        ACCESSOR(mx);
+        ACCESSOR(my);
 
         // The fun stuff
         ACCESSOR_GETTER(CTRL_A);
