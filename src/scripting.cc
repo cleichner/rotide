@@ -77,6 +77,11 @@ Accessors accessors[] = {
     ACCESSOR_GETTER_MAP(Scripting_engine, CTRL_Y),
     ACCESSOR_GETTER_MAP(Scripting_engine, CTRL_Z),
     ACCESSOR_GETTER_MAP(Scripting_engine, I),
+    ACCESSOR_GETTER_MAP(Scripting_engine, H),
+    ACCESSOR_GETTER_MAP(Scripting_engine, J),
+    ACCESSOR_GETTER_MAP(Scripting_engine, K),
+    ACCESSOR_GETTER_MAP(Scripting_engine, L),
+    ACCESSOR_GETTER_MAP(Scripting_engine, ZERO),
     ACCESSOR_GETTER_MAP(Scripting_engine, ESC),
     ACCESSOR_GETTER_MAP(Scripting_engine, COLON),
     { NULL, NULL, NULL }
@@ -872,6 +877,25 @@ ACCESSOR_GETTER_DEFINE(Scripting_engine, CTRL_Z)
 
 ACCESSOR_GETTER_DEFINE(Scripting_engine, I)
 { return Int32::New(105); }
+
+ACCESSOR_GETTER_DEFINE(Scripting_engine, H)
+{ return Int32::New(104); }
+
+ACCESSOR_GETTER_DEFINE(Scripting_engine, J)
+{ return Int32::New(106); }
+
+ACCESSOR_GETTER_DEFINE(Scripting_engine, K)
+{ return Int32::New(107); }
+
+ACCESSOR_GETTER_DEFINE(Scripting_engine, L)
+{ return Int32::New(108); }
+
+ACCESSOR_GETTER_DEFINE(Scripting_engine, ZERO)
+{ return Int32::New(48); }
+
+
+
+
 
 ACCESSOR_GETTER_DEFINE(Scripting_engine, ESC)
 { return Int32::New(27); }
