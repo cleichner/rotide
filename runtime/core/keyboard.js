@@ -14,12 +14,18 @@ ro.bind([ro.CTRL_A, ro.CTRL_S], "test", function (args) {
         ro.test(10 + i, 5, "Whoa, you said " + args[i] + " which is crazy.");
 });
 
+ro.bind([ro.COLON], "command_text", function () {
+    if (ro.insert_mode) return false;
+    ro.cmd_mode = true;
+});
+
 /*
  * Creates a binding for leaving insert mode.
  * DEFAULT: esc
  */
 ro.bind([ro.ESC], "command", function () {
     ro.status = "-- WAITING --";
+    ro.cmd_mode = false;
 
     if (ro.insert_mode) {
         ro.insert_mode = false;
@@ -33,6 +39,6 @@ ro.bind([ro.ESC], "command", function () {
     return false
 })
 
-ro.on_command(function (cmd) {
-    ro.cmd_history.append(cmd);
+ro.command(function (cmd) {
+    ro.status = "-- BAD! --";
 });

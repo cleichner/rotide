@@ -39,13 +39,14 @@ using namespace v8;
 //
 //      test        : function ()
 //      bind        : function ([Key], String, function)
-//      on_command  : function (function ([Key]))
-//      on_command  : function (String, function ([Key]))
+//      command  : function (function ([Key]))
+//      command  : function (String, function ([Key]))
 //
 namespace {
 
 Accessors accessors[] = {
     ACCESSOR_MAP(Scripting_engine, insert_mode),
+    ACCESSOR_MAP(Scripting_engine, cmd_mode),
     ACCESSOR_MAP(Scripting_engine, status),
     ACCESSOR_GETTER_MAP(Scripting_engine, CTRL_A),
     ACCESSOR_GETTER_MAP(Scripting_engine, CTRL_B),
@@ -75,13 +76,14 @@ Accessors accessors[] = {
     ACCESSOR_GETTER_MAP(Scripting_engine, CTRL_Z),
     ACCESSOR_GETTER_MAP(Scripting_engine, I),
     ACCESSOR_GETTER_MAP(Scripting_engine, ESC),
+    ACCESSOR_GETTER_MAP(Scripting_engine, COLON),
     { NULL, NULL, NULL }
 };
 
 Function_mapping functions[] = {
     FUNCTION_MAP(Scripting_engine, test),
     FUNCTION_MAP(Scripting_engine, bind),
-    FUNCTION_MAP(Scripting_engine, on_command),
+    FUNCTION_MAP(Scripting_engine, command),
     { NULL, NULL, NULL }
 };
 
@@ -209,6 +211,10 @@ bool is_ctrl_key(const int key)
     return (key >= CTRL_A && key <= CTRL_Z);
 }
 
+bool is_cmd_key(const int key) {
+    return (key >= 32 && key <= 126);
+}
+
 // A key combination is any series of keys pressed that are defined to
 // have a callback to a JavaScript function.
 //
@@ -236,78 +242,75 @@ void Scripting_engine::handle_key_combination()
     Key_list::const_iterator kcit, end;
     Curses_pos status = curses->status();
     int key = curses->last_key;
-    HandleScope handle;
-    Context::Scope scope(context);
-    Handle<Array> arguments;
 
     // If the key pressed is any variation of CTRL+A to CTRL+Z
     // excluding CTRL+J (since ENTER holds the same values traditionally)
     // then append the key to the vector and update the status.
-    if (is_ctrl_key(key) && key != CTRL_J) {
-        key_combination.push_back(key);
+    if ((attrs.cmd_mode && is_cmd_key(key)) || (is_ctrl_key(key) && key != CTRL_J)) {
         status << CLEAR;
+        key_combination.push_back(key);
         for (kcit = key_combination.begin(), end = key_combination.end();
                 kcit != end;
                 ++kcit)
         {
-            status << KEY_STR(*kcit);
-            if ((kcit + 1) != end) 
-                status << "-";
-        }
-    // Now were' in the case that we did not press CTRL+A .. CTRL+Z and
-    // instead are just typing a single command.
-    } else {
-        const Function_list* list;
-
-        // If we are in insert mode then we don't want to parse
-        // any single key press commands.
-        // TODO(justinvh): We can't really do this yet. The distinction
-        // between a command mode and an editing mode is not truly defined.
-        
-        // if (insert_mode()) 
-        //  return;
-        if (key == CTRL_J && key_combination.empty())
-            return;
-
-        if (!insert_mode()) 
-            status << CLEAR << COLOR(WHITE, RED) << BOLD;
-
-        // Remember, CTRL+J is the same as ENTER.
-        if (key == CTRL_J) {
-            // If the current key combination does not produce a binding
-            // then we need to alert the user.
-            if (!bindings.get(key_combination, &list, &arguments)) {
-                if (insert_mode()) return;
-
-                status << "ERROR: \"";
-                for (kcit = key_combination.begin(),
-                        end = key_combination.end();
-                        kcit != end;
-                        ++kcit)
-                {
-                    status << KEY_STR(*kcit, KS_NO_PRETTY_PRINT);
-                    if (is_ctrl_key(*kcit) 
+                status << KEY_STR(*kcit, KS_NO_PRETTY_PRINT);
+                if (is_ctrl_key(*kcit) 
                             && (kcit + 1) != end
                             && is_ctrl_key(*(kcit + 1))) {
                         status << "-";
-                    }
                 }
-                status << "\" is not an editor command." << RESET;
-                key_history.push_back(key_combination);
-                key_combination.clear();
-                return;
-            }
-        } else if (!insert_mode()
-                && key_combination.size()
-                && is_ctrl_key(*key_combination.begin())) {
-            if (key_combination.begin() != key_combination.end()
-                    && is_ctrl_key(*(key_combination.end() - 1)) 
-                    && !is_ctrl_key(key)) {
-                key_combination.push_back((int)' ');
-            }
+        }
+        return;
+    } 
 
-            key_combination.push_back(key);
-            status << RESET;
+    // Now were' in the case that we did not press CTRL+A .. CTRL+Z and
+    // instead are just typing a single command.
+    HandleScope handle;
+    Context::Scope scope(context);
+    Handle<Array> arguments;
+
+    const Function_list* list;
+    std::string cmd_no_args;
+
+    // If we are in insert mode then we don't want to parse
+    // any single key press commands.
+    // TODO(justinvh): We can't really do this yet. The distinction
+    // between a command mode and an editing mode is not truly defined.
+    
+    // if (insert_mode()) 
+    //  return;
+    if (key == CTRL_J && key_combination.empty())
+        return;
+
+    if (!insert_mode()) 
+        status << CLEAR << COLOR(WHITE, RED) << BOLD;
+
+    // Remember, CTRL+J is the same as ENTER.
+    if (key == CTRL_J && attrs.cmd_mode) {
+        std::stringstream buf;
+        for (kcit = key_combination.begin(),
+                end = key_combination.end();
+                kcit != end;
+                ++kcit)
+        {
+            buf << KEY_STR(*kcit, KS_NO_PRETTY_PRINT);
+        }
+        const std::string& cmd_str = buf.str();
+        if (!bindings.get(cmd_str, &cmd_no_args, &list, &arguments)) {
+            status  << "ERROR: \"" 
+                    << cmd_no_args << "\" is not an editor command." 
+                    << RESET;
+            key_history.push_back(key_combination);
+            key_combination.clear();
+            return;
+        }
+    } else if (key == CTRL_J) {
+        // If the current key combination does not produce a binding
+        // then we need to alert the user.
+        if (!bindings.get(key_combination, &list, &arguments)) {
+            if (insert_mode()) return;
+
+            status << "ERROR: \"";
             for (kcit = key_combination.begin(),
                     end = key_combination.end();
                     kcit != end;
@@ -315,63 +318,104 @@ void Scripting_engine::handle_key_combination()
             {
                 status << KEY_STR(*kcit, KS_NO_PRETTY_PRINT);
                 if (is_ctrl_key(*kcit) 
-                            && (kcit + 1) != end
-                            && is_ctrl_key(*(kcit + 1))) {
-                        status << "-";
+                        && (kcit + 1) != end
+                        && is_ctrl_key(*(kcit + 1))) {
+                    status << "-";
                 }
             }
-            return;
-        }
-        // Now we are just typing a single key. So, parse the command
-        // as single key press.
-        // TODO(justinvh):  Support multiple keys. A CTRL+<A..Z> mode is
-        //                  different then a character mode. 
-        else if (!bindings.get(key, &list)) {
-            if (insert_mode()) return;
-
-            status 
-                << "ERROR: \"" 
-                << KEY_STR(key) << "\" is not an editor command." 
-                << RESET;
+            status << "\" is not an editor command." << RESET;
             key_history.push_back(key_combination);
             key_combination.clear();
             return;
         }
+    } else if (!insert_mode()
+            && key_combination.size()
+            && is_ctrl_key(*key_combination.begin())) {
 
-        status << RESET << CLEAR;
-
-        // Now a valid function list has been generated. Create the
-        // execution context and call the JavaScript function.
-        TryCatch tc;
-        Handle<Value> values[1] = { arguments };
-        for (Function_list::const_iterator cit = list->begin(),
-                end = list->end();
-                cit != end;
-                ++cit)
-        {
-            // TODO(justinvh):  A buffer object or some sort of exposed
-            //                  buffer should be available as an argument.
-            
-            assert((*cit).IsEmpty() == false && "Lost handle to function!");
-            if (arguments.IsEmpty()) {
-                (*cit)->Call(object, 0, NULL);
-            } else {
-                (*cit)->Call(object, 1, values);
-            }
-
-            if (tc.HasCaught()) {
-                Curses_pos pos = curses->at(0, 0);
-                Local<Message> message = tc.Message();
-                pos << "[FAIL]" << message->GetLineNumber() << "> "
-                    << *String::Utf8Value(message->Get());
-                return;
-            }
+        if (key_combination.size()
+                && is_ctrl_key(*(key_combination.end() - 1)) 
+                && !is_ctrl_key(key)) {
+            key_combination.push_back((int)' ');
         }
 
+        key_combination.push_back(key);
+        status << RESET;
+        for (kcit = key_combination.begin(),
+                end = key_combination.end();
+                kcit != end;
+                ++kcit)
+        {
+            status << KEY_STR(*kcit, KS_NO_PRETTY_PRINT);
+            if (is_ctrl_key(*kcit) 
+                        && (kcit + 1) != end
+                        && is_ctrl_key(*(kcit + 1))) {
+                    status << "-";
+            }
+        }
+        return;
+    }
+    // Now we are just typing a single key. So, parse the command
+    // as single key press.
+    // TODO(justinvh):  Support multiple keys. A CTRL+<A..Z> mode is
+    //                  different then a character mode. 
+    else if (!bindings.get(key, &list)) {
+        if (insert_mode()) return;
+
+        status 
+            << "ERROR: \"" 
+            << KEY_STR(key) << "\" is not an editor command." 
+            << RESET;
         key_history.push_back(key_combination);
         key_combination.clear();
+        return;
     }
 
+    assert(list != NULL && "The function list is empty!");
+    status << RESET << CLEAR;
+
+    // Now a valid function list has been generated. Create the
+    // execution context and call the JavaScript function.
+    TryCatch tc;
+    Handle<Value> values[1] = { arguments };
+    Handle<Value> ret;
+    bool success = false;
+    for (Function_list::const_iterator cit = list->begin(),
+            end = list->end();
+            cit != end;
+            ++cit)
+    {
+        // TODO(justinvh):  A buffer object or some sort of exposed
+        //                  buffer should be available as an argument.
+        
+        assert((*cit).IsEmpty() == false && "Lost handle to function!");
+        if (arguments.IsEmpty()) {
+            ret = (*cit)->Call(object, 0, NULL);
+        } else {
+            ret = (*cit)->Call(object, 1, values);
+        }
+
+        if (!ret.IsEmpty() && ret->IsBoolean())
+            success |= ret->BooleanValue();
+
+        if (tc.HasCaught()) {
+            Curses_pos pos = curses->at(0, 0);
+            Local<Message> message = tc.Message();
+            pos << "[FAIL]" << message->GetLineNumber() << "> "
+                << *String::Utf8Value(message->Get());
+            return;
+        }
+    }
+
+    if (!success && cmd_no_args.size()) {
+        status 
+            << CLEAR
+            << "ERROR: \"" 
+            << cmd_no_args << "\" is not an editor command." 
+            << RESET;
+    }
+
+    key_history.push_back(key_combination);
+    key_combination.clear();
 }
 
 // When the engine thinks it needs to figure out key combinations,
@@ -528,11 +572,11 @@ FUNCTION_DEFINE(Scripting_engine, bind)
     }
 }
 
-// JavaScript function: ro.on_command (String, function (Args...))
-// JavaScript function: ro.on_command (function (Command, Args...))
+// JavaScript function: ro.command (String, function (Args...))
+// JavaScript function: ro.command (function (Command, Args...))
 // Defines a callback for when a command is entered. A command is any
 // successful CTRL+ modifier or explicit command.
-FUNCTION_DEFINE(Scripting_engine, on_command)
+FUNCTION_DEFINE(Scripting_engine, command)
 {
     // Unwrap object
     Scripting_engine* self = unwrap<Scripting_engine>(args.Holder());
@@ -543,7 +587,7 @@ FUNCTION_DEFINE(Scripting_engine, on_command)
     if (args[0]->IsFunction()) {
         Local<Function> fun_val = Local<Function>::Cast(args[0]);
         Persistent<Function> function = Persistent<Function>::New(fun_val);
-        self->attrs.on_command["*"].push_back(function);
+        self->bindings.insert("*", function);
         return Undefined();
     } else if (args[0]->IsString() && args[1]->IsFunction()) {
         Local<Value> cmd_repr = args[0];
@@ -551,7 +595,7 @@ FUNCTION_DEFINE(Scripting_engine, on_command)
         Local<Function> fun_val = Local<Function>::Cast(args[1]);
         Persistent<Function> function = Persistent<Function>::New(fun_val);
         if (smart_convert(cmd_repr, &cmd)) {
-            self->attrs.on_command[cmd].push_back(function);
+            self->bindings.insert(cmd, function);
             return Undefined();
         }
     }
@@ -592,6 +636,37 @@ ACCESSOR_SETTER_DEFINE(Scripting_engine, insert_mode)
                     "insert_mode is either true or false."));
     }
 }
+
+// JavaScript getter: ro.cmd_mode : boolean
+// If true the editor is in cmd_mode. Otherwise it may or may not be in
+// insert_mode.  
+// Returns the value of cmd_mode
+ACCESSOR_GETTER_DEFINE(Scripting_engine, cmd_mode)
+{
+    HandleScope scope;
+    Scripting_engine* self = unwrap<Scripting_engine>(info.Holder());
+    Local<Value> cmd_mode_repr;
+    if (smart_convert(self->attrs.cmd_mode, &cmd_mode_repr)) {
+        return cmd_mode_repr;
+    } else {
+        return Exception::Error(
+                String::New(
+                    "Fatal error in converting type of cmd_mode"));
+    }
+}
+// JavaScript getter: ro.cmd_mode : boolean
+// If true the editor is in insert mode. Otherwise it is in a command mode.
+// Sets the value of cmd_mode
+ACCESSOR_SETTER_DEFINE(Scripting_engine, cmd_mode)
+{
+    Scripting_engine* self = unwrap<Scripting_engine>(info.Holder());
+    if (!smart_convert(value, &self->attrs.cmd_mode)) {
+        Exception::Error(
+                String::New(
+                    "cmd_mode is either true or false."));
+    }
+}
+
 
 // JavaScript getter: ro.status : string
 // Updates the status bar of the editor.
@@ -720,3 +795,6 @@ ACCESSOR_GETTER_DEFINE(Scripting_engine, I)
 
 ACCESSOR_GETTER_DEFINE(Scripting_engine, ESC)
 { return Int32::New(27); }
+
+ACCESSOR_GETTER_DEFINE(Scripting_engine, COLON)
+{ return Int32::New(COLON); }

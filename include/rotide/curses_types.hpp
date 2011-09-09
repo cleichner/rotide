@@ -60,7 +60,8 @@ enum Curses_extended_keys
     CTRL_Y,
     CTRL_Z,
     SUB,
-    ESC
+    ESC,
+    COLON = 58,
 };
 
 enum Key_string_mode {

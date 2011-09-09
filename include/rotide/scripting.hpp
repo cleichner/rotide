@@ -31,9 +31,8 @@ class Curses_pos;
 class Key_node;
 
 typedef std::map<int, Key_node> Key_mapping;
-//typedef std::vector<v8::Handle<v8::Function> > Function_list;
 typedef std::map<std::string, Function_list> Function_map;
-typedef std::map<std::string, v8::Persistent<v8::Function> > Command_mapping; 
+typedef std::map<std::string, Function_list> Command_mapping; 
 typedef std::vector<int> Key_list;
 typedef std::vector<Key_list> Key_history;
 typedef std::vector<std::string> Argument_list;
@@ -41,10 +40,9 @@ typedef std::vector<std::string> Argument_list;
 class Scripting_attributes {
 public:
     Scripting_attributes()
-        : insert_mode(false), status("-- WAITING --") { }
-    bool insert_mode;
+        : insert_mode(false), cmd_mode(false), status("-- WAITING --") { }
+    bool insert_mode, cmd_mode;
     std::string status;
-    Function_map on_command;
 };
 
 struct Key_node{
@@ -82,15 +80,49 @@ public:
         }
 
         v8::Persistent<v8::Function> persistent_fun = v8::Persistent<v8::Function>::New(fun);
-        cmds[cmd] = persistent_fun;
+        cmds[cmd].push_back(persistent_fun);
         node->functions.push_back(persistent_fun);
     }
 
-    bool get(const std::string& cmd, v8::Handle<v8::Function>* fun)
+    void insert(const std::string& cmd, const v8::Handle<v8::Function>& fun)
     {
+        v8::Persistent<v8::Function> persistent_fun = v8::Persistent<v8::Function>::New(fun);
+        cmds[cmd].push_back(persistent_fun);
+    }
+
+    bool get(const std::string& cmd_str, std::string* cmd_val, const Function_list** fun, v8::Handle<v8::Array>* arguments)
+    {
+        size_t offset = cmd_str.find_first_of(" ");
+        offset = (offset == std::string::npos) ? cmd_str.size() : offset;
+        const std::string& cmd = cmd_str.substr(0, offset);
+
+        if (cmd_val)
+            *cmd_val = cmd;
+
         Command_mapping::iterator cmit = cmds.find(cmd);
+
         if (cmit != cmds.end()) {
-            fun = &cmit->second;
+            *fun = &cmit->second;
+
+            if ((offset + 1) < cmd_str.size()) {
+                const std::string& arg_str = cmd_str.substr(offset + 1);
+                std::string::const_iterator cit = arg_str.begin();
+                std::string::const_iterator end = arg_str.end();
+                set_arguments<std::string>(cit, end, arguments);
+            }
+
+            return true;
+        }
+
+        cmit = cmds.find("*");
+        if (cmit != cmds.end()) {
+            *fun = &cmit->second;
+            if ((offset + 1) < cmd_str.size()) {
+                const std::string& arg_str = cmd_str.substr(offset + 1);
+                std::string::const_iterator cit = arg_str.begin();
+                std::string::const_iterator end = arg_str.end();
+                set_arguments<std::string>(cit, end, arguments);
+            }
             return true;
         }
 
@@ -107,12 +139,72 @@ public:
         return false;
     }
 
+    template<class T>
+    void set_arguments(
+            typename T::const_iterator& beg, 
+            typename T::const_iterator& end, 
+            v8::Handle<v8::Array>* arguments)
+    {
+        bool in_quote = false;
+        char c = *beg, p = '\0';
+        std::stringstream buf;
+        Argument_list arg_list;
+        for (typename T::const_iterator ait = beg;
+                ait != end;
+                ++ait)
+        {
+            c = *ait;
+            bool end_next = (ait + 1) == end;
+            bool is_quote = (c == '"' && p != '\\');
+
+            // Switch our quote states
+            if (is_quote) 
+                in_quote = !in_quote;
+
+            // If the last character is next then make sure to
+            // include it (unless it is a quote)
+            if (end_next && !is_quote)
+                buf << c;
+
+            // If we're not in a quote and we're in a separator
+            // or we're near the end then we can append the
+            // string to the stream.
+            if ((!in_quote && c == ' ') || end_next) {
+                p = c;
+                arg_list.push_back(buf.str());
+                buf.str("");
+                continue;
+            }
+
+            p = c;
+
+            if (is_quote || p == '\\')
+                continue;
+
+            buf << c;
+        }
+
+        *arguments = v8::Array::New(arg_list.size());
+
+        int i = 0;
+        for (Argument_list::const_iterator argit = arg_list.begin(),
+                argend = arg_list.end();
+                argit != argend;
+                ++argit, i++)
+        {
+            // TODO(justinvh): type-based arguments?
+            const char* s = (*argit).c_str();
+            (*arguments)->Set(i, v8::String::New(s, (*argit).size()));
+        }
+
+    }
+
     bool get(const Key_list& key_list, 
             const Function_list** funs, 
             v8::Handle<v8::Array>* arguments)
     {
         Key_mapping* mapping = &keys;
-        Key_mapping::iterator kit = keys.end();
+        Key_mapping::iterator kit = mapping->end();
 
         bool is_cmd = is_ctrl_key(*key_list.begin());
         for (Key_list::const_iterator cit = key_list.begin(),
@@ -125,62 +217,14 @@ public:
                     && (*cit) == int(' ') 
                     && (cit + 1) != end) 
             {
-                ++cit;
-
-                bool in_quote = false;
-                char c = *cit, p = '\0';
-                std::stringstream buf;
-                Argument_list arg_list;
-                for (Key_list::const_iterator ait = cit;
-                        ait != end;
-                        ++ait)
-                {
-                    c = *ait;
-                    bool end_next = (ait + 1) == end;
-                    bool is_quote = (c == '"' && p != '\\');
-
-                    // Switch our quote states
-                    if (is_quote) 
-                        in_quote = !in_quote;
-
-                    // If the last character is next then make sure to
-                    // include it (unless it is a quote)
-                    if (end_next && !is_quote)
-                        buf << c;
-
-                    // If we're not in a quote and we're in a separator
-                    // or we're near the end then we can append the
-                    // string to the stream.
-                    if ((!in_quote && c == ' ') || end_next) {
-                        p = c;
-                        arg_list.push_back(buf.str());
-                        buf.str("");
-                        continue;
-                    }
-
-                    p = c;
-
-                    if (is_quote || p == '\\')
-                        continue;
-
-                    buf << c;
+                if (kit->second.functions.size()) {
+                    ++cit;
+                    set_arguments<Key_list>(cit, end, arguments);
+                    *funs = &kit->second.functions;
+                    return true;
                 }
 
-                *arguments = v8::Array::New(arg_list.size());
-
-                int i = 0;
-                for (Argument_list::const_iterator argit = arg_list.begin(),
-                        argend = arg_list.end();
-                        argit != argend;
-                        ++argit, i++)
-                {
-                    // TODO(justinvh): type-based arguments?
-                    const char* s = (*argit).c_str();
-                    (*arguments)->Set(i, v8::String::New(s, (*argit).size()));
-                }
-
-                *funs = &kit->second.functions;
-                return true;
+                return false;
             }
 
             kit = mapping->find(*cit);
@@ -233,8 +277,9 @@ public:
     {
         FUNCTION(test);
         FUNCTION(bind);
-        FUNCTION(on_command);
+        FUNCTION(command);
         ACCESSOR(insert_mode);
+        ACCESSOR(cmd_mode);
         ACCESSOR(status);
 
         // The fun stuff
@@ -266,6 +311,7 @@ public:
         ACCESSOR_GETTER(CTRL_Z);
         ACCESSOR_GETTER(I);
         ACCESSOR_GETTER(ESC);
+        ACCESSOR_GETTER(COLON);
     };
 
     static v8::Handle<v8::Object> wrap_class_as_object(
