@@ -248,6 +248,11 @@ void Scripting_engine::handle_key_combination()
     // then append the key to the vector and update the status.
     if ((attrs.cmd_mode && is_cmd_key(key)) || (is_ctrl_key(key) && key != CTRL_J)) {
         status << CLEAR;
+
+        if (attrs.cmd_mode) {
+            status << attrs.status;
+        }
+
         key_combination.push_back(key);
         for (kcit = key_combination.begin(), end = key_combination.end();
                 kcit != end;
@@ -376,22 +381,31 @@ void Scripting_engine::handle_key_combination()
     // Now a valid function list has been generated. Create the
     // execution context and call the JavaScript function.
     TryCatch tc;
-    Handle<Value> values[1] = { arguments };
+    const char* cmd_cc = cmd_no_args.c_str();
+    Local<String> cmd_vs = String::New(cmd_cc);
+    Handle<Value> binding_cmd[1] = { arguments };
+    Handle<Value> string_cmd[2] = { 
+        cmd_vs,
+        arguments 
+    };
+
     Handle<Value> ret;
     bool success = false;
+
     for (Function_list::const_iterator cit = list->begin(),
             end = list->end();
             cit != end;
             ++cit)
     {
-        // TODO(justinvh):  A buffer object or some sort of exposed
-        //                  buffer should be available as an argument.
-        
         assert((*cit).IsEmpty() == false && "Lost handle to function!");
-        if (arguments.IsEmpty()) {
+
+        if (attrs.cmd_mode) {
+            int i = arguments.IsEmpty() ? 1 : 2;
+            ret = (*cit)->Call(object, i, string_cmd);
+        } else if (arguments.IsEmpty()) {
             ret = (*cit)->Call(object, 0, NULL);
         } else {
-            ret = (*cit)->Call(object, 1, values);
+            ret = (*cit)->Call(object, 1, binding_cmd);
         }
 
         if (!ret.IsEmpty() && ret->IsBoolean())

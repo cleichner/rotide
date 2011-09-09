@@ -43,6 +43,7 @@ public:
         : insert_mode(false), cmd_mode(false), status("-- WAITING --") { }
     bool insert_mode, cmd_mode;
     std::string status;
+    int status_x;
 };
 
 struct Key_node{

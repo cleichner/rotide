@@ -9,13 +9,14 @@ ro.bind([ro.I], "insert", function(buffer) {
         ro.status = "-- INSERT --"
 });
 
-ro.bind([ro.CTRL_A, ro.CTRL_S], "test", function (args) {
+ro.bind([ro.CTRL_A, ro.CTRL_S], "test", function (cmd, args) {
     for (i = 0; i < args.length; i++)
         ro.test(10 + i, 5, "Whoa, you said " + args[i] + " which is crazy.");
 });
 
 ro.bind([ro.COLON], "command_text", function () {
     if (ro.insert_mode) return false;
+    ro.status = "#";
     ro.cmd_mode = true;
 });
 
@@ -39,6 +40,11 @@ ro.bind([ro.ESC], "command", function () {
     return false
 })
 
-ro.command(function (cmd) {
-    ro.status = "-- BAD! --";
+ro.command(function (cmd, args) {
+    if (cmd == "hello") {
+        ro.test(3, 2, "Interepreted it correctly!");
+        return true;
+    }
+
+    return false;
 });
