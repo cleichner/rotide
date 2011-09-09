@@ -247,7 +247,7 @@ bool is_cmd_key(const int key) {
 void Scripting_engine::handle_key_combination()
 {
     Key_list::const_iterator kcit, end;
-    Curses_pos status = curses->status();
+    Curses_pos& status = curses->status();
     int key = curses->last_key;
 
 
@@ -255,7 +255,6 @@ void Scripting_engine::handle_key_combination()
     // excluding CTRL+J (since ENTER holds the same values traditionally)
     // then append the key to the vector and update the status.
     if ((attrs.cmd_mode && is_cmd_key(key)) || (is_ctrl_key(key) && key != CTRL_J)) {
-        status << FOCUS;
         status << CLEAR;
 
         if (attrs.cmd_mode) {
@@ -277,7 +276,6 @@ void Scripting_engine::handle_key_combination()
         return;
     } 
 
-    status << NOFOCUS;
     curses->touched_window = curses->active_window;
 
     // Now were' in the case that we did not press CTRL+A .. CTRL+Z and
@@ -433,8 +431,8 @@ void Scripting_engine::handle_key_combination()
     }
 
     if (!success && cmd_no_args.size()) {
+        status << CLEAR << COLOR(WHITE, RED) << BOLD;
         status 
-            << CLEAR
             << "ERROR: \"" 
             << cmd_no_args << "\" is not an editor command." 
             << RESET;

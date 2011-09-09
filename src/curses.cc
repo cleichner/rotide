@@ -141,6 +141,7 @@ void Curses::shutdown()
 // Refresh the active_window window. Make the curses go to the appropriate position.
 void Curses::refresh()
 {
+    wrefresh(status_window);
     wrefresh(touched_window);
 }
 
