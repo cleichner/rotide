@@ -1,0 +1,74 @@
+Managing buffers internally
+
+Say we have a blank buffer:
+ _________________________
+|                         |
+|                         |
+|                         |
+|                         |
+|                         |
+|                         |
+|                         |
+|                         |
+|_________________________|
+
+First, the buffer has no control over the interactions with it. It doesn't
+care if you insert a character at (3, 4) or (5, 3). The constructs of what
+denotes a valid insertion is left up to the controller. However, we can
+have operators on the buffer.
+
+The buffer is always a rectangle. There are no memory constraints.
+
+==== INIT ====
+When we first initialize the buffer, we are just creating an allocation
+that we can insert into.
+
+.   Initialize buffer (128 bytes, 128 bytes) with EOL:
+.   .   Did the allocation go okay?
+.   .   .   Yes, continue. Set first character as EOF.
+.   .   .   No, exit.
+
+==== RESIZE (row, col) ====
+Attempts to resize the buffer to the given row*2, column*2.
+
+.   Create a new allocation of row*2 bytes*column*2 bytes.
+.   .   Did the allocation go okay?
+.   .   .   Yes, copy the old buffer into the new one.
+.   .   .   .   Free the old buffer.
+.   .   .   No, dump the file. Exit.
+
+
+==== INSERT (row, col, char) ====
+We are inserting a character into the buffer at the given row and column.
+
+.   Is the row * (column + 1) exceed the size of the buffer?
+.   .   Yes, resize() is necessary.
+.   .   No, continue.
+
+.   Insert character into the given spot.
+.   Is the character a newline?
+.   .   Yes
+.   .   .   Shift everything *below* the given line down one line.
+.   .   .   Shift everything to the right of newline to the next line.
+.   .   No
+.   .   .   Shift all characters in the current line to the right one.
+.   .   .   Possible handling of linewrapping here.
+.   Is the EOF character behind the inserted character?
+.   .   Yes, then move the EOF to 1-character post this position.
+
+==== DELETE (row, col) ====
+This is the most complicated of the arguments.
+
+.   Remove the character at the given spot - 1:
+.   Is that character a newline?
+.   .   Yes
+.   .   .   Do we have enough room to move this line?
+.   .   .   .   Yes, move the current line to the end of the last line.
+.   .   .   .   Shift all the lines below the current line up one.
+.   .   No
+.   .   .  Shift memory at that line to the left 1 from the character
+
+==== REPLACE(row, col, char) ====
+Easiest operation.
+
+.   Replace the character at the given spot with the new character.
