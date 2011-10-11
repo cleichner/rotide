@@ -70,6 +70,7 @@ Curses::Curses()
     // Initialize ncurses
     initscr();
     start_color();
+    use_default_colors();
     raw();
     keypad(stdscr, TRUE);
     noecho();
@@ -77,6 +78,7 @@ Curses::Curses()
     // Create a screen buffer
     getmaxyx(stdscr, row, col);
     active_window = newwin(row - 2, col, 0, 0);
+    screen_buffer.resize(row, col);
     status_window = newwin(2, col, row - 2, 0);
     touched_window = active_window;
     touchwin(active_window);
@@ -158,6 +160,15 @@ void Curses::wait()
     wgetch(active_window);
 }
 
+// Check the if the cursor position is valid
+bool Curses::check_cursor(int mx, int my)
+{
+    pos.col = mx;
+    pos.row = my;
+    wmove(active_window, pos.row, pos.col);
+    return true;
+}
+
 // Gets the next pressed character and returns true or false depending
 // on if CTRL_C is pressed or not.
 // TODO(justinvh): The CTRL_C break is a temporary thing.
@@ -168,6 +179,14 @@ bool Curses::get(char* s)
     if (*s == CTRL_C)
         return false;
     return true;
+}
+
+// Inserts a character into the screen buffer. This is different then
+// echoing characters onto the screen.
+void Curses::insert(const int row, const int col, const char c)
+{
+    if (active_window == touched_window)
+        screen_buffer.insert(row, col, c);
 }
 
 // Returns a curses position object at a given x, y so that input can
@@ -184,8 +203,8 @@ Curses_pos& Curses::at(const int x, const int y)
     pos.col = y;
     pos.row = x;
     pos.active = active_window;
-    pos.col = pos.col == 0 ? 1 : pos.col;
-    pos.row = pos.row == 0 ? 1 : pos.row;
+    pos.col = pos.col < 0 ? 0 : pos.col;
+    pos.row = pos.row < 0 ? 0 : pos.row;
     wmove(active_window, pos.row, pos.col);
     return pos;
 }
@@ -210,9 +229,11 @@ Curses_pos& Curses::status()
 void Curses_pos::print(const std::string& s)
 {
     wmove(active, row, col);
-    mvwprintw(active, row, col, "%s", s.c_str());
+    const char* str = s.c_str();
+    mvwprintw(active, row, col, "%s", str);
     col += s.size();
     if (focus) instance->touched_window = active;
+    instance->insert(row, col, str[0]);
 }
 
 // Handles transforming a position as the character stream moves.

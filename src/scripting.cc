@@ -649,6 +649,7 @@ ACCESSOR_GETTER_DEFINE(Scripting_engine, insert_mode)
                     "Fatal error in converting type of insert_mode"));
     }
 }
+
 // JavaScript getter: ro.insert_mode : boolean
 // If true the editor is in insert mode. Otherwise it is in a command mode.
 // Sets the value of insert_mode
@@ -890,9 +891,6 @@ ACCESSOR_GETTER_DEFINE(Scripting_engine, L)
 
 ACCESSOR_GETTER_DEFINE(Scripting_engine, ZERO)
 { return Int32::New(48); }
-
-
-
 
 
 ACCESSOR_GETTER_DEFINE(Scripting_engine, ESC)
