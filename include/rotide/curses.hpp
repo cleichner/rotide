@@ -22,6 +22,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <deque>
 
 class Curses;
 
@@ -29,6 +30,35 @@ class Curses;
 namespace curses_lib {
 #include <ncurses.h>
 }
+
+// Ideas:
+typedef std::vector<char> Buffer_columns;
+typedef std::vector<Buffer_columns> Buffer_rows;
+class Curses_buffer {
+public:
+
+    Buffer_rows buffer;
+
+    Curses_buffer() {
+        buffer.reserve(100);
+        rows = 0;
+    }
+
+    void resize(int row, int col) {
+    }
+
+    void insert(int row, int col, char x) {
+        if (row > rows) {
+            buffer.push_back(Buffer_columns());
+            rows = row;
+        }
+
+        buffer[row].push_back(x);
+    }
+
+    int rows;
+};
+
 
 // The Curses_pos class describes a position on the screen that can
 // be written to using the stream-style operators. It requires
@@ -83,6 +113,9 @@ public:
     Curses();
     ~Curses();
 
+    // Check if an input works
+    bool check_cursor(int mx, int my);
+
     // Refresh the window
     void refresh();
 
@@ -107,6 +140,9 @@ public:
     // Draw a status bar
     void draw_status_bar();
 
+    // Inserts a character into the screen buffer
+    void insert(const int row, const int col, const char c);
+
     // Create a curses position instance at the given x, y for input
     Curses_pos& at(const int row, const int col);
 
@@ -122,6 +158,7 @@ public:
     curses_lib::WINDOW* status_window;
 
     Buffer_list buffers;
+    Curses_buffer screen_buffer;
 };
 
 #endif // ROTIDE_CURSES_HPP
